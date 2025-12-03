@@ -22,7 +22,7 @@ main.hex: main.elf
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
 
 flash: main.hex
-	$(AVRDUDE) -p m4809 -c $(PROGRAMMER) -P $(PORT) -B 125kHz -U flash:w:main.hex
+	$(AVRDUDE) -p m4809 -c $(PROGRAMMER) -P $(PORT) -U flash:w:main.hex
 
 clean:
 	del main.elf main.hex src\*.o 2> NUL || rm -f main.elf main.hex src/*.o
