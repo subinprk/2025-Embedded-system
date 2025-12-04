@@ -1,6 +1,4 @@
-// #define UART_F_CPU 16000000UL 
-#define BAUD_RATE 9600
-
+// BAUD_RATE is defined in Makefile via -DBAUD_RATE=xxxx
 #include <avr/io.h>
 #include "../include/uart.h"
 
@@ -41,15 +39,21 @@ char USART1_readChar(void)
 //To use PF as a debugging UART
 void USART2_init(void)
 {
-    // Route USART2 to PF0 (TX) and PF1 (RX)
-    PORTMUX.USARTROUTEA |= PORTMUX_USART2_ALT1_gc;
-
-    // Set PF0 as output (TX), PF1 as input (RX)
+    // Set PF0 as output (TX), PF1 as input (RX) FIRST
     PORTF.DIRSET = PIN0_bm;
     PORTF.DIRCLR = PIN1_bm;
+    
+    // Route USART2 to PF0 (TX) and PF1 (RX) - DEFAULT mapping
+    PORTMUX.USARTROUTEA = (PORTMUX.USARTROUTEA & ~PORTMUX_USART2_gm) | PORTMUX_USART2_DEFAULT_gc;
 
+    // Calculate baud rate from F_CPU (defined in Makefile)
+    // BAUD = (64 * F_CPU) / (16 * BAUD_RATE)
     USART2.BAUD = (uint16_t)((F_CPU * 64UL) / (16UL * BAUD_RATE));
-    USART2.CTRLC = USART_CHSIZE_8BIT_gc;
+    
+    // 8-bit data, no parity, 1 stop bit
+    USART2.CTRLC = USART_CHSIZE_8BIT_gc | USART_PMODE_DISABLED_gc | USART_SBMODE_1BIT_gc;
+    
+    // Enable TX and RX
     USART2.CTRLB = USART_TXEN_bm | USART_RXEN_bm;
 }
 

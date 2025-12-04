@@ -1,6 +1,7 @@
 MCU=atmega4809
 CC=avr-gcc
-CFLAGS=-mmcu=$(MCU) -Os -DF_CPU=20000000UL -DBAUD_RATE=9600
+# Actual clock: 16MHz / 6 = 2.67MHz (OSCCFG fuse selects 16MHz base)
+CFLAGS=-mmcu=$(MCU) -Os -DF_CPU=2666667UL -DBAUD_RATE=9600
 OBJCOPY=avr-objcopy
 AVRDUDE=avrdude
 
@@ -22,7 +23,7 @@ main.hex: main.elf
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
 
 flash: main.hex
-	$(AVRDUDE) -p m4809 -c $(PROGRAMMER) -P $(PORT) -U flash:w:main.hex
+	$(AVRDUDE) -p m4809 -c $(PROGRAMMER) -P $(PORT) -F -U flash:w:main.hex
 
 clean:
 	del main.elf main.hex src\*.o 2> NUL || rm -f main.elf main.hex src/*.o
