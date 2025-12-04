@@ -1,7 +1,8 @@
 MCU=atmega4809
 CC=avr-gcc
-# Actual clock: 16MHz / 6 = 2.67MHz (OSCCFG fuse selects 16MHz base)
-CFLAGS=-mmcu=$(MCU) -Os -DF_CPU=2666667UL -DBAUD_RATE=9600
+# Clock: 16MHz (prescaler disabled in software)
+# Base oscillator is 16MHz (OSCCFG fuse), we disable /6 prescaler in clock_init()
+CFLAGS=-mmcu=$(MCU) -Os -DF_CPU=16000000UL -DBAUD_RATE=9600
 OBJCOPY=avr-objcopy
 AVRDUDE=avrdude
 
