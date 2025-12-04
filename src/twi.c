@@ -29,9 +29,9 @@ void TWI0_init(void)
 
     // I2C clock calculation: MBAUD = (F_CPU / (2 * f_SCL)) - 5
     // For 16MHz @ 100kHz I2C: MBAUD = (16,000,000 / 200,000) - 5 = 75
-    // For 16MHz @ 400kHz I2C: MBAUD = (16,000,000 / 800,000) - 5 = 15
-    // Use 100kHz for more reliable communication
-    TWI0.MBAUD = 75;  // 100kHz I2C @ 16MHz CPU
+    // For 16MHz @ 50kHz I2C: MBAUD = (16,000,000 / 100,000) - 5 = 155
+    // Use slower speed for MLX90640 reliability
+    TWI0.MBAUD = 155;  // 50kHz I2C @ 16MHz CPU (slower but more reliable)
 
     TWI0.MCTRLA = TWI_ENABLE_bm;
     TWI0.MSTATUS = TWI_BUSSTATE_IDLE_gc;
@@ -41,9 +41,39 @@ void TWI0_init(void)
 
 void TWI0_reset_bus(void)
 {
-    // Force bus to idle state
+    // Disable TWI
+    TWI0.MCTRLA = 0;
+    
+    // Set SCL and SDA as outputs temporarily
+    PORTA.DIRSET = PIN2_bm | PIN3_bm;  // SDA=PA2, SCL=PA3
+    
+    // Toggle SCL up to 9 times to free stuck slave
+    for (uint8_t i = 0; i < 9; i++) {
+        PORTA.OUTCLR = PIN3_bm;  // SCL low
+        _delay_us(20);
+        PORTA.OUTSET = PIN3_bm;  // SCL high
+        _delay_us(20);
+    }
+    
+    // Generate STOP condition
+    PORTA.OUTCLR = PIN2_bm;  // SDA low
+    _delay_us(20);
+    PORTA.OUTSET = PIN3_bm;  // SCL high
+    _delay_us(20);
+    PORTA.OUTSET = PIN2_bm;  // SDA high (STOP)
+    _delay_us(20);
+    
+    // Return pins to input with pullup
+    PORTA.DIRCLR = PIN2_bm | PIN3_bm;
+    PORTA.PIN2CTRL = PORT_PULLUPEN_bm;
+    PORTA.PIN3CTRL = PORT_PULLUPEN_bm;
+    
+    // Re-enable TWI
+    TWI0.MBAUD = 155;
+    TWI0.MCTRLA = TWI_ENABLE_bm;
     TWI0.MSTATUS = TWI_BUSSTATE_IDLE_gc;
-    _delay_us(50);
+    
+    _delay_us(100);
 }
 
 void TWI0_debug_status(void)
@@ -92,10 +122,18 @@ void TWI0_scan(void)
 
 uint8_t TWI0_start(uint8_t address)
 {
+    // Check bus state first
+    uint8_t busstate = TWI0.MSTATUS & TWI_BUSSTATE_gm;
+    
+    // If bus is not IDLE or OWNER, try to recover
+    if (busstate == TWI_BUSSTATE_BUSY_gc || busstate == TWI_BUSSTATE_UNKNOWN_gc) {
+        TWI0_reset_bus();
+        _delay_ms(1);
+    }
+    
     // Clear any pending flags before starting
-    uint8_t status = TWI0.MSTATUS;
-    if (status & TWI_ARBLOST_bm) {
-        TWI_DEBUG_SEND_STRING("Bus arbitration lost\r\n");
+    if (TWI0.MSTATUS & (TWI_ARBLOST_bm | TWI_BUSERR_bm)) {
+        TWI0.MSTATUS = TWI_ARBLOST_bm | TWI_BUSERR_bm;  // Clear by writing 1
         TWI0_reset_bus();
     }
     
@@ -103,9 +141,6 @@ uint8_t TWI0_start(uint8_t address)
     uint16_t timeout = TWI_TIMEOUT;
     while (!(TWI0.MSTATUS & (TWI_WIF_bm | TWI_RIF_bm)) && --timeout);
     if (timeout == 0) {
-        char buf[50];
-        snprintf(buf, sizeof(buf), "Start TO, MSTATUS=0x%02X\r\n", TWI0.MSTATUS);
-        TWI_DEBUG_SEND_STRING(buf);
         TWI0_reset_bus();
         return 0;  // Timeout
     }
@@ -138,7 +173,6 @@ uint8_t TWI0_read_ack(void)
     uint16_t timeout = TWI_TIMEOUT;
     while (!(TWI0.MSTATUS & TWI_RIF_bm) && --timeout);
     if (timeout == 0) {
-        TWI_DEBUG_SEND_STRING("Read ACK Timeout (RIF not set)\r\n");
         return 0xFF;
     }
     
@@ -156,10 +190,6 @@ uint8_t TWI0_read_nack(void)
     uint16_t timeout = TWI_TIMEOUT;
     while (!(TWI0.MSTATUS & TWI_RIF_bm) && --timeout);
     if (timeout == 0) {
-        char buf[60];
-        snprintf(buf, sizeof(buf), "Read NACK TO, MSTATUS=0x%02X, RIF=%d\r\n", 
-                 TWI0.MSTATUS, !!(TWI0.MSTATUS & TWI_RIF_bm));
-        TWI_DEBUG_SEND_STRING(buf);
         return 0xFF;
     }
     

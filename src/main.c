@@ -49,18 +49,16 @@ int main(void)
     
     while (1)
     {
-        // Read MLX90640 Device ID
-        USART2_sendString("\r\n=== MLX90640 ===\r\n");
-        USART2_sendString("Device ID: ");
-        debug_MLX_read16(0x2407);
-
-        //========MPU6050 Read Test========//
+        // Send thermal frame to PC for visualization
+        USART2_sendString("\r\n=== Reading MLX90640 Frame ===\r\n");
+        MLX_send_frame_to_pc();
+        
+        // Also show MPU6050 data
         USART2_sendString("\r\n=== MPU6050 ===\r\n");
-        debug_MPU6050_read8(0x75, "WHO_AM_I");   // Should be 0x68
-        debug_MPU6050_read8(0x6B, "PWR_MGMT_1"); // Should be 0x00 after init
-        debug_MPU6050_read8(0x3B, "ACCEL_X_H");  // Now should show real data!
+        debug_MPU6050_read8(0x75, "WHO_AM_I");
+        debug_MPU6050_read8(0x3B, "ACCEL_X_H");
 
         PORTF.OUTTGL = PIN5_bm;  // LED toggle
-        _delay_ms(1000);
+        _delay_ms(2000);  // 2 second delay between frames
     }
 }
