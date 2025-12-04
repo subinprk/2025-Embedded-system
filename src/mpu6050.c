@@ -70,19 +70,19 @@ void MPU6050_debug_test(void)
     char buffer[60];
     int16_t ax, ay, az, gx, gy, gz;
     
-    USART1_sendString("\r\n=== MPU6050 Test ===\r\n");
+    USART2_sendString("\r\n=== MPU6050 Test ===\r\n");
     
     if (MPU6050_test_connection()) {
-        USART1_sendString("MPU6050 connected! (WHO_AM_I = 0x68)\r\n");
+        USART2_sendString("MPU6050 connected! (WHO_AM_I = 0x68)\r\n");
         
         MPU6050_read_accel(&ax, &ay, &az);
         snprintf(buffer, sizeof(buffer), "Accel: X=%d Y=%d Z=%d\r\n", ax, ay, az);
-        USART1_sendString(buffer);
+        USART2_sendString(buffer);
         
         MPU6050_read_gyro(&gx, &gy, &gz);
         snprintf(buffer, sizeof(buffer), "Gyro:  X=%d Y=%d Z=%d\r\n", gx, gy, gz);
-        USART1_sendString(buffer);
+        USART2_sendString(buffer);
     } else {
-        USART1_sendString("MPU6050 NOT FOUND!\r\n");
+        USART2_sendString("MPU6050 NOT FOUND!\r\n");
     }
 }
