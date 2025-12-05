@@ -28,10 +28,13 @@ void TWI0_init(void)
     PORTA.PIN3CTRL = PORT_PULLUPEN_bm;
 
     // I2C clock calculation: MBAUD = (F_CPU / (2 * f_SCL)) - 5
-    // For 16MHz @ 100kHz I2C: MBAUD = (16,000,000 / 200,000) - 5 = 75
-    // For 16MHz @ 50kHz I2C: MBAUD = (16,000,000 / 100,000) - 5 = 155
-    // Use slower speed for MLX90640 reliability
-    TWI0.MBAUD = 155;  // 50kHz I2C @ 16MHz CPU (slower but more reliable)
+    // For 16MHz CPU:
+    //   @ 400kHz I2C: MBAUD = (16,000,000 / 800,000) - 5 = 15
+    //   @ 200kHz I2C: MBAUD = (16,000,000 / 400,000) - 5 = 35
+    //   @ 100kHz I2C: MBAUD = (16,000,000 / 200,000) - 5 = 75
+    //   @  50kHz I2C: MBAUD = (16,000,000 / 100,000) - 5 = 155
+    // MLX90640 supports up to 1MHz, try 400kHz for good speed/reliability balance
+    TWI0.MBAUD = 15;  // 400kHz I2C @ 16MHz CPU
 
     TWI0.MCTRLA = TWI_ENABLE_bm;
     TWI0.MSTATUS = TWI_BUSSTATE_IDLE_gc;
@@ -68,8 +71,8 @@ void TWI0_reset_bus(void)
     PORTA.PIN2CTRL = PORT_PULLUPEN_bm;
     PORTA.PIN3CTRL = PORT_PULLUPEN_bm;
     
-    // Re-enable TWI
-    TWI0.MBAUD = 155;
+    // Re-enable TWI at 400kHz
+    TWI0.MBAUD = 15;  // 400kHz
     TWI0.MCTRLA = TWI_ENABLE_bm;
     TWI0.MSTATUS = TWI_BUSSTATE_IDLE_gc;
     

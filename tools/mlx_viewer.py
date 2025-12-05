@@ -19,6 +19,8 @@ import numpy as np
 import sys
 import time
 import re
+import threading
+from queue import Queue, Empty
 
 # Pre-compile regex for hex parsing (faster than split + validate)
 HEX_PATTERN = re.compile(r'[0-9A-Fa-f]{4}')
@@ -33,6 +35,10 @@ class MLX90640Viewer:
         self.frame_count = 0
         self.last_fps_time = time.time()
         self.fps = 0
+        self.running = True
+        
+        # Thread-safe queue for frames
+        self.frame_queue = Queue(maxsize=2)
         
         if use_opencv:
             self._setup_opencv()
@@ -98,35 +104,47 @@ class MLX90640Viewer:
             return False
     
     def wait_for_frame_start(self):
-        """Wait for FRAME_START marker"""
+        """Wait for FRAME_START marker or detect frame data directly"""
         timeout = time.time() + 5  # 5 second timeout
-        while time.time() < timeout:
+        while self.running and time.time() < timeout:
             if self.ser.in_waiting > 0:
                 line = self.ser.readline().decode('utf-8', errors='ignore').strip()
                 if 'FRAME_START' in line:
                     return True
-                # Print other messages for debugging (less frequently)
-                if line and 'FRAME' not in line and self.frame_count % 10 == 0:
+                # Also detect if we see a line that looks like pixel data (32 hex values)
+                # This handles case where FRAME_START was missed
+                if ',' in line and len(HEX_PATTERN.findall(line)) >= 20:
+                    # Push this line back by storing it for read_frame
+                    self._pending_line = line
+                    return True
+                # Print other messages for debugging (limit output)
+                if line and 'FRAME' not in line and not line.startswith('FF'):
                     print(f"[MCU] {line}")
         return False
     
     def read_frame(self):
-        """Read one frame of pixel data - optimized for speed"""
+        """Read one frame of pixel data - accepts ALL hex values including 0xFFFF"""
         pixels = []
         error_count = 0
-        max_lines = 50
+        max_lines = 100
         lines_read = 0
+        frame_start_time = time.time()
         
-        # Read all available data at once for efficiency
-        while len(pixels) < 768 and lines_read < max_lines:
+        # Check for pending line from wait_for_frame_start
+        if hasattr(self, '_pending_line') and self._pending_line:
+            line = self._pending_line
+            self._pending_line = None
+            matches = HEX_PATTERN.findall(line)
+            for v in matches:
+                pixels.append(int(v, 16))
+        
+        while self.running and len(pixels) < 768 and lines_read < max_lines:
             lines_read += 1
             
-            # Check if data available (non-blocking check)
-            if self.ser.in_waiting == 0:
-                time.sleep(0.001)  # Brief sleep if no data
+            try:
+                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+            except:
                 continue
-                
-            line = self.ser.readline().decode('utf-8', errors='ignore').strip()
             
             if 'FRAME_END' in line:
                 break
@@ -134,46 +152,71 @@ class MLX90640Viewer:
                 pixels = []
                 error_count = 0
                 lines_read = 0
+                frame_start_time = time.time()
                 continue
             if not line:
                 continue
             
-            # Skip error lines quickly
-            if any(c in line for c in ['F', 'T', 'a', 'M', 'R', 'E']) and \
-               any(err in line for err in ['FAIL', 'Timeout', 'TO,', 'arbitration', 'MSTATUS', 'RIF=', 'Errors:']):
-                error_count += 1
+            # Skip non-data lines (errors, debug messages)
+            if 'Errors:' in line or 'Loop' in line or 'Hotspot' in line or 'MPU' in line:
+                continue
+            if 'FAIL' in line or 'Timeout' in line or 'WHO_AM' in line:
                 continue
             
-            # Fast hex parsing using pre-compiled regex
+            # Parse hex values - accept ALL values including 0xFFFF
             matches = HEX_PATTERN.findall(line)
-            for v in matches:
-                val = int(v, 16)
-                if val != 0xFFFF:
+            if matches:
+                for v in matches:
+                    val = int(v, 16)
                     pixels.append(val)
-                else:
-                    error_count += 1
+                    if val == 0xFFFF:
+                        error_count += 1
         
-        if error_count > 0 and self.frame_count % 10 == 0:
-            print(f"[Warning] {error_count} read errors during frame")
+        frame_time = time.time() - frame_start_time
         
         if len(pixels) >= 768:
-            self.frame_data = np.array(pixels[:768], dtype=np.uint16).reshape(24, 32)
-            return True
+            frame_data = np.array(pixels[:768], dtype=np.uint16).reshape(24, 32)
+            return frame_data, error_count, frame_time
         elif len(pixels) >= 384:
+            # Partial frame - pad with zeros or repeat last value
+            print(f"[Frame] Partial: {len(pixels)}/768 pixels, {error_count} I2C errors")
             padded = np.zeros(768, dtype=np.uint16)
             padded[:len(pixels)] = pixels
             if len(pixels) > 0:
-                avg = int(np.mean(pixels))
-                padded[len(pixels):] = avg
-            self.frame_data = padded.reshape(24, 32)
-            return True
+                padded[len(pixels):] = pixels[-1]  # Repeat last value
+            return padded.reshape(24, 32), error_count, frame_time
         else:
             if len(pixels) > 0:
-                print(f"Incomplete frame: got {len(pixels)} pixels")
-            return False
+                print(f"[Frame] Incomplete: {len(pixels)}/768 pixels")
+            return None, error_count, frame_time
     
-    def update_plot(self):
+    def serial_reader_thread(self):
+        """Background thread to read serial data without blocking GUI"""
+        print("[Thread] Serial reader started")
+        while self.running:
+            try:
+                if self.wait_for_frame_start():
+                    result = self.read_frame()
+                    if result[0] is not None:
+                        # Put frame in queue (drop old frames if queue full)
+                        try:
+                            self.frame_queue.put_nowait(result)
+                        except:
+                            # Queue full, drop oldest and add new
+                            try:
+                                self.frame_queue.get_nowait()
+                                self.frame_queue.put_nowait(result)
+                            except:
+                                pass
+            except Exception as e:
+                if self.running:
+                    print(f"[Thread] Error: {e}")
+                    time.sleep(0.1)
+        print("[Thread] Serial reader stopped")
+    
+    def update_plot(self, frame_data, error_count, frame_time):
         """Update the plot with new data - optimized for speed"""
+        self.frame_data = frame_data
         self.frame_count += 1
         
         # Calculate FPS every second
@@ -184,11 +227,11 @@ class MLX90640Viewer:
             self.last_fps_time = now
         
         if self.use_opencv:
-            self._update_opencv()
+            self._update_opencv(error_count, frame_time)
         else:
-            self._update_matplotlib()
+            self._update_matplotlib(error_count, frame_time)
     
-    def _update_opencv(self):
+    def _update_opencv(self, error_count=0, frame_time=0):
         """Update OpenCV display - very fast"""
         # Normalize to 0-255 for display
         vmin, vmax = self.frame_data.min(), self.frame_data.max()
@@ -203,17 +246,22 @@ class MLX90640Viewer:
         # Upscale for better visibility
         display = self.cv2.resize(colored, (640, 480), interpolation=self.cv2.INTER_NEAREST)
         
-        # Add text overlay
-        self.cv2.putText(display, f"Min: {vmin:.0f} Max: {vmax:.0f} FPS: {self.fps:.1f}", 
+        # Add text overlay with more info
+        self.cv2.putText(display, f"Min: {vmin:.0f} Max: {vmax:.0f}", 
                         (10, 30), self.cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        self.cv2.putText(display, f"FPS: {self.fps:.1f} | MCU frame: {frame_time*1000:.0f}ms", 
+                        (10, 60), self.cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+        if error_count > 0:
+            self.cv2.putText(display, f"I2C errors: {error_count}", 
+                            (10, 90), self.cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 1)
         
         self.cv2.imshow('MLX90640 Thermal', display)
         
         # Process window events (1ms wait)
         if self.cv2.waitKey(1) & 0xFF == ord('q'):
-            raise KeyboardInterrupt()
+            self.running = False
     
-    def _update_matplotlib(self):
+    def _update_matplotlib(self, error_count=0, frame_time=0):
         """Update matplotlib display with blitting for speed"""
         vmin, vmax = self.frame_data.min(), self.frame_data.max()
         
@@ -224,35 +272,52 @@ class MLX90640Viewer:
         if vmax > vmin:
             self.im.set_clim(vmin=vmin, vmax=vmax)
         
-        # Update title less frequently (every 5 frames)
-        if self.frame_count % 5 == 0:
-            self.title.set_text(f'MLX90640 - Min: {vmin:.0f}, Max: {vmax:.0f}, FPS: {self.fps:.1f}')
+        # Update title with timing info
+        self.title.set_text(f'Min: {vmin:.0f}, Max: {vmax:.0f} | FPS: {self.fps:.1f} | MCU: {frame_time*1000:.0f}ms')
         
         # Use blitting for faster updates
         self.fig.canvas.restore_region(self.bg)
         self.ax.draw_artist(self.im)
+        self.ax.draw_artist(self.title)
         self.fig.canvas.blit(self.ax.bbox)
         self.fig.canvas.flush_events()
     
     def run(self):
-        """Main loop"""
+        """Main loop with threaded serial reading"""
         if not self.connect():
             return
         
+        print("="*50)
+        print("MLX90640 Thermal Viewer")
+        print("="*50)
         print("Waiting for thermal data...")
         print("Press Ctrl+C to exit" + (" or 'q' in window" if self.use_opencv else ""))
+        print("\nNOTE: If 'MCU frame' time is >500ms, the bottleneck is")
+        print("      your ATmega's I2C speed, not Python!")
+        print("="*50)
+        
+        # Start serial reader in background thread
+        reader_thread = threading.Thread(target=self.serial_reader_thread, daemon=True)
+        reader_thread.start()
         
         try:
-            while True:
-                if self.wait_for_frame_start():
-                    if self.read_frame():
-                        self.update_plot()
-                        # Print status less frequently
-                        if self.frame_count % 10 == 0:
-                            print(f"Frame OK - Min: {self.frame_data.min():.0f}, Max: {self.frame_data.max():.0f}, FPS: {self.fps:.1f}")
+            while self.running:
+                try:
+                    # Get frame from queue with timeout (keeps GUI responsive)
+                    frame_data, error_count, frame_time = self.frame_queue.get(timeout=0.1)
+                    self.update_plot(frame_data, error_count, frame_time)
+                except Empty:
+                    # No frame ready, just keep GUI responsive
+                    if self.use_opencv:
+                        if self.cv2.waitKey(1) & 0xFF == ord('q'):
+                            self.running = False
+                    else:
+                        self.fig.canvas.flush_events()
         except KeyboardInterrupt:
             print("\nExiting...")
         finally:
+            self.running = False
+            reader_thread.join(timeout=1.0)
             if self.ser:
                 self.ser.close()
             if self.use_opencv:
