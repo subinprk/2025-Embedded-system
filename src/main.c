@@ -24,25 +24,8 @@ void clock_init(void)
     while (CLKCTRL.MCLKSTATUS & CLKCTRL_SOSC_bm);
 }
 
-int main(void)
-{
-    // Set CPU clock to 16MHz (disable /6 prescaler)
-    clock_init();
-    _delay_ms(100); 
-    USART2_init();
-    TWI0_init();
-    _delay_ms(100);
-    
-    // Aggressive I2C bus recovery at startup
-    for (uint8_t i = 0; i < 3; i++) {
-        TWI0_reset_bus();
-        _delay_ms(50);
-    }
-    
-    // LED toggle test (PF5 as LED)
-    PORTF.DIRSET = PIN5_bm;
-    
-    // Send startup message
+void initial_debugging(void){
+ // Send startup message
     USART2_sendString("\r\n");
     USART2_sendString("================================\r\n");
     USART2_sendString("ATmega4809 @ 16MHz - I2C Test\r\n");
@@ -66,31 +49,53 @@ int main(void)
     debug_MPU6050_read8(0x75, "WHO_AM_I");
     
     USART2_sendString("\r\n--- Starting main loop ---\r\n");
+}
+
+void sensor_loop_debugging(int loop_count){
+char buf[40];
+        snprintf(buf, sizeof(buf), "\r\n--- Loop %d ---\r\n", loop_count);
+        USART2_sendString(buf);
+        // Reset bus before each cycle
+        TWI0_reset_bus();
+        _delay_ms(50);
+        // Send frame to PC for Python visualization
+        MLX_send_frame_to_pc();
+        // Process thermal image and find hotspot
+        MLX_process_and_report();
+        // MPU6050 quick check
+        USART2_sendString("\r\nMPU6050: ");
+
+        uint8_t who = MPU6050_read8(0x75);
+        snprintf(buf, sizeof(buf), "WHO_AM_I=0x%02X\r\n", who);
+        MPU6050_debug_test();
+        USART2_sendString(buf);
+}
+
+int main(void)
+{
+    // Set CPU clock to 16MHz (disable /6 prescaler)
+    clock_init();
+    _delay_ms(100); 
+    USART2_init();
+    TWI0_init();
+    _delay_ms(100);
     
+    // Aggressive I2C bus recovery at startup
+    for (uint8_t i = 0; i < 3; i++) {
+        TWI0_reset_bus();
+        _delay_ms(50);
+    }
+    
+    // LED toggle test (PF5 as LED)
+    PORTF.DIRSET = PIN5_bm;
+    initial_debugging();
+   
     uint8_t loop_count = 0;
     
     while (1)
     {
         loop_count++;
-        char buf[40];
-        snprintf(buf, sizeof(buf), "\r\n--- Loop %d ---\r\n", loop_count);
-        USART2_sendString(buf);
-        
-        // Reset bus before each cycle
-        TWI0_reset_bus();
-        _delay_ms(50);
-        
-        // Send frame to PC for Python visualization
-        MLX_send_frame_to_pc();
-        
-        // Process thermal image and find hotspot
-        MLX_process_and_report();
-        
-        // MPU6050 quick check
-        USART2_sendString("\r\nMPU6050: ");
-        uint8_t who = MPU6050_read8(0x75);
-        snprintf(buf, sizeof(buf), "WHO_AM_I=0x%02X\r\n", who);
-        USART2_sendString(buf);
+        sensor_loop_debugging(loop_count);
 
         PORTF.OUTTGL = PIN5_bm;  // LED toggle
         _delay_ms(500);  // 0.5 second delay between readings
