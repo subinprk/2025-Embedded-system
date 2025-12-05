@@ -24,16 +24,18 @@ class MLX90640Viewer:
         self.ser = None
         self.frame_data = np.zeros((24, 32))
         
-        # Setup plot
-        plt.ion()  # Interactive mode
+        # Setup plot with faster backend
+        plt.style.use('fast')
         self.fig, self.ax = plt.subplots(figsize=(10, 7))
         self.im = self.ax.imshow(self.frame_data, cmap='inferno', 
-                                  interpolation='bilinear',
+                                  interpolation='nearest',  # faster than bilinear
                                   vmin=0, vmax=65535)
         self.colorbar = plt.colorbar(self.im, ax=self.ax, label='Raw Value')
         self.ax.set_title('MLX90640 Thermal Image (Raw)')
         self.ax.set_xlabel('X (32 pixels)')
         self.ax.set_ylabel('Y (24 pixels)')
+        plt.show(block=False)
+        plt.pause(0.1)
         
     def connect(self):
         """Connect to serial port"""
@@ -129,12 +131,16 @@ class MLX90640Viewer:
             return False
     
     def update_plot(self):
-        """Update the plot with new data"""
+        """Update the plot with new data - optimized for speed"""
         self.im.set_data(self.frame_data)
-        self.im.set_clim(vmin=self.frame_data.min(), vmax=self.frame_data.max())
-        self.ax.set_title(f'MLX90640 Thermal Image\nMin: {self.frame_data.min():.0f}, Max: {self.frame_data.max():.0f}')
-        self.fig.canvas.draw()
+        # Only update color limits, skip title updates for speed
+        vmin, vmax = self.frame_data.min(), self.frame_data.max()
+        if vmax > vmin:  # Avoid issues with uniform data
+            self.im.set_clim(vmin=vmin, vmax=vmax)
+        self.ax.set_title(f'MLX90640 - Min: {vmin:.0f}, Max: {vmax:.0f}')
+        self.fig.canvas.draw_idle()  # faster than draw()
         self.fig.canvas.flush_events()
+        plt.pause(0.001)  # minimal pause to allow GUI update
     
     def run(self):
         """Main loop"""

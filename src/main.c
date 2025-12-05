@@ -33,6 +33,12 @@ int main(void)
     TWI0_init();
     _delay_ms(100);
     
+    // Aggressive I2C bus recovery at startup
+    for (uint8_t i = 0; i < 3; i++) {
+        TWI0_reset_bus();
+        _delay_ms(50);
+    }
+    
     // LED toggle test (PF5 as LED)
     PORTF.DIRSET = PIN5_bm;
     
@@ -74,6 +80,9 @@ int main(void)
         TWI0_reset_bus();
         _delay_ms(50);
         
+        // Send frame to PC for Python visualization
+        MLX_send_frame_to_pc();
+        
         // Process thermal image and find hotspot
         MLX_process_and_report();
         
@@ -84,6 +93,6 @@ int main(void)
         USART2_sendString(buf);
 
         PORTF.OUTTGL = PIN5_bm;  // LED toggle
-        _delay_ms(3000);  // 3 second delay between readings
+        _delay_ms(500);  // 0.5 second delay between readings
     }
 }

@@ -163,34 +163,34 @@ void MLX_send_frame_to_pc(void)
     uint16_t error_count = 0;
     
     TWI0_reset_bus();
-    _delay_ms(10);
+    _delay_ms(5);
     
     USART2_sendString("FRAME_START\r\n");
     
-    for (uint16_t i = 0; i < 768; i++) {
-        pixel_data = MLX_read16(MLX_RAM_START + i);
+    // Read in chunks of 32 pixels (one row) for better I2C efficiency
+    for (uint16_t row = 0; row < 24; row++) {
+        uint16_t row_start = MLX_RAM_START + (row * 32);
         
-        if (pixel_data == 0xFFFF) {
-            error_count++;
+        for (uint16_t col = 0; col < 32; col++) {
+            pixel_data = MLX_read16(row_start + col);
+            
+            if (pixel_data == 0xFFFF) {
+                error_count++;
+            }
+            
+            snprintf(buffer, sizeof(buffer), "%04X", pixel_data);
+            USART2_sendString(buffer);
+            
+            if (col < 31) {
+                USART2_sendChar(',');
+            }
+        }
+        USART2_sendString("\r\n");
+        
+        // Reset bus every 4 rows instead of every 128 pixels
+        if ((row + 1) % 4 == 0) {
             TWI0_reset_bus();
-            _delay_ms(1);
-        }
-        
-        snprintf(buffer, sizeof(buffer), "%04X", pixel_data);
-        USART2_sendString(buffer);
-        
-        if (i < 767) {
-            USART2_sendChar(',');
-        }
-        
-        if ((i + 1) % 32 == 0) {
-            USART2_sendString("\r\n");
             _delay_us(500);
-        }
-        
-        if ((i + 1) % 128 == 0) {
-            TWI0_reset_bus();
-            _delay_ms(2);
         }
     }
     
