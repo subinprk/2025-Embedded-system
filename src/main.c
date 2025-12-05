@@ -6,6 +6,7 @@
 #include "../include/mlx90640.h"
 #include "../include/mpu6050.h"
 #include "../include/mlxProcess.h"
+#include "../include/pwm.h"
 
 // Function to set CPU clock to maximum speed (16MHz or 20MHz depending on fuse)
 void clock_init(void)
@@ -52,23 +53,56 @@ void initial_debugging(void){
 }
 
 void sensor_loop_debugging(int loop_count){
-char buf[40];
-        snprintf(buf, sizeof(buf), "\r\n--- Loop %d ---\r\n", loop_count);
-        USART2_sendString(buf);
-        // Reset bus before each cycle
-        TWI0_reset_bus();
-        _delay_ms(50);
-        // Send frame to PC for Python visualization
-        MLX_send_frame_to_pc();
-        // Process thermal image and find hotspot
-        MLX_process_and_report();
-        // MPU6050 quick check
-        USART2_sendString("\r\nMPU6050: ");
+    char buf[40];
+    snprintf(buf, sizeof(buf), "\r\n--- Loop %d ---\r\n", loop_count);
+    USART2_sendString(buf);
+    // Reset bus before each cycle
+    TWI0_reset_bus();
+    _delay_ms(50);
+    // Send frame to PC for Python visualization
+    MLX_send_frame_to_pc();
+    // Process thermal image and find hotspot
+    MLX_process_and_report();
+    // MPU6050 quick check
+    USART2_sendString("\r\nMPU6050: ");
 
-        uint8_t who = MPU6050_read8(0x75);
-        snprintf(buf, sizeof(buf), "WHO_AM_I=0x%02X\r\n", who);
-        MPU6050_debug_test();
-        USART2_sendString(buf);
+    uint8_t who = MPU6050_read8(0x75);
+    snprintf(buf, sizeof(buf), "WHO_AM_I=0x%02X\r\n", who);
+    MPU6050_debug_test();
+    USART2_sendString(buf);
+}
+
+void pwm_loop_debugging(int loop_count){
+    int static motor_phase = 0;
+    if ((loop_count % 20) == 0) {
+        switch (motor_phase) {
+            case 0:
+                // both forward
+                motorA_forward();
+                motorB_forward();
+                USART2_sendString("Motors: BOTH FORWARD\r\n");
+                break;
+            case 1:
+                // both stop
+                motorA_stop();
+                motorB_stop();
+                USART2_sendString("Motors: BOTH STOP\r\n");
+                break;
+            case 2:
+                // both backward
+                motorA_backward();
+                motorB_backward();
+                USART2_sendString("Motors: BOTH BACKWARD\r\n");
+                break;
+            case 3:
+                // alternating directions
+                motorA_forward();
+                motorB_backward();
+                USART2_sendString("Motors: A FORWARD, B BACKWARD\r\n");
+                break;
+        }
+        motor_phase = (motor_phase + 1) & 0x03;
+    }
 }
 
 int main(void)
@@ -78,6 +112,7 @@ int main(void)
     _delay_ms(100); 
     USART2_init();
     TWI0_init();
+    motor_init();
     _delay_ms(100);
     
     // Aggressive I2C bus recovery at startup
@@ -89,6 +124,7 @@ int main(void)
     // LED toggle test (PF5 as LED)
     PORTF.DIRSET = PIN5_bm;
     initial_debugging();
+    // Initialize motor driver pins
    
     uint8_t loop_count = 0;
     
@@ -96,7 +132,11 @@ int main(void)
     {
         loop_count++;
         sensor_loop_debugging(loop_count);
-
+        // Change motor status every 10 seconds. Main loop delays 500ms,
+        // so 20 iterations == 10 seconds.
+        
+        
+        pwm_loop_debugging(loop_count);  // Initial motor state
         PORTF.OUTTGL = PIN5_bm;  // LED toggle
         _delay_ms(500);  // 0.5 second delay between readings
     }

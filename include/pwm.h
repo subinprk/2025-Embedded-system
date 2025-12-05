@@ -1,0 +1,40 @@
+// pwm.h
+// Motor control interface for Double L9100S (two channels)
+// Pins used:
+//  - Motor A: PC0 (IN1), PC1 (IN2)
+//  - Motor B: PC5 (IN1), PD0 (IN2)
+
+#ifndef PWM_H
+#define PWM_H
+
+#include <stdint.h>
+#include <avr/io.h>
+
+// Motor A pin masks (PORTC)
+#define MOTOR_A_IN1_bm PIN0_bm
+#define MOTOR_A_IN2_bm PIN1_bm
+
+// Motor B pin definitions (IN1 on PORTC, IN2 on PORTD)
+#define MOTOR_B_IN1_PORT PORTC
+#define MOTOR_B_IN1_bm PIN5_bm
+#define MOTOR_B_IN2_PORT PORTD
+#define MOTOR_B_IN2_bm PIN0_bm
+
+// Initialize motor driver pins (set as outputs, outputs low)
+void motor_init(void);
+
+// Set motor A speed/direction. Range -100..100 (negative = reverse).
+// Note: this implementation uses digital outputs (no hardware PWM).
+// Any non-zero value turns the motor on in the requested direction.
+void motorA_set(int8_t speed);
+void motorA_forward(void);
+void motorA_backward(void);
+void motorA_stop(void);
+
+// Set motor B speed/direction. Range -100..100 (negative = reverse).
+void motorB_set(int8_t speed);
+void motorB_forward(void);
+void motorB_backward(void);
+void motorB_stop(void);
+
+#endif // PWM_H
