@@ -1,7 +1,6 @@
 // pwm.c
 // Basic motor control for Double L9100S using digital pins
 
-#include <avr/io.h>
 #include "../include/pwm.h"
 
 // Initialize motor pins as outputs and set them low (coast)
@@ -77,4 +76,30 @@ void motorB_set(int8_t speed)
     } else {
         motorB_stop();
     }
+}
+
+void task_pwm_update(void)
+{
+    sched_flags.pwm_due = false;
+
+    static uint8_t motor_phase = 0;
+    switch (motor_phase) {
+        case 0:
+            motorA_forward();
+            motorB_forward();
+            break;
+        case 1:
+            motorA_stop();
+            motorB_stop();
+            break;
+        case 2:
+            motorA_backward();
+            motorB_backward();
+            break;
+        case 3:
+            motorA_forward();
+            motorB_backward();
+            break;
+    }
+    motor_phase = (motor_phase + 1) & 0x03;
 }

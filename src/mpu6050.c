@@ -86,3 +86,45 @@ void MPU6050_debug_test(void)
         USART2_sendString("MPU6050 NOT FOUND!\r\n");
     }
 }
+
+//======== MPU6050 Functions ========
+
+#define MPU6050_ADDR 0x68
+
+uint8_t MPU6050_read8(uint8_t reg)
+{
+    uint8_t result;
+    
+    result = TWI0_start((MPU6050_ADDR << 1) | 0);
+    if (!result) {
+        TWI0_stop();
+        TWI0_reset_bus();
+        return 0xFF;
+    }
+    
+    result = TWI0_write(reg);
+    if (!result) {
+        TWI0_stop();
+        TWI0_reset_bus();
+        return 0xFF;
+    }
+
+    result = TWI0_start((MPU6050_ADDR << 1) | 1);
+    if (!result) {
+        TWI0_stop();
+        TWI0_reset_bus();
+        return 0xFF;
+    }
+    
+    uint8_t data = TWI0_read_nack();
+    _delay_us(100);
+    return data;
+}
+
+void debug_MPU6050_read8(uint8_t reg, const char *label)
+{
+    uint8_t value = MPU6050_read8(reg);
+    char buffer[40];
+    snprintf(buffer, sizeof(buffer), "%s: 0x%02X\r\n", label, value);
+    USART2_sendString(buffer);
+}

@@ -22,9 +22,7 @@ void debug_MLX_read16(uint16_t reg);
 void MLX_read_frame(uint16_t *buffer);      // Read one subpage (384 pixels)
 void MLX_send_frame_to_pc(void);            // Send raw frame data over UART
 uint8_t MLX_wait_for_data(void);            // Wait for new frame ready
-
-//======== MPU6050 function prototypes ========
-uint8_t MPU6050_read8(uint8_t reg);
-void debug_MPU6050_read8(uint8_t reg, const char *label);
+uint8_t MLX_poll_data_ready(void);          // Non-blocking ready check
+void MLX_read_row(uint8_t row_index, uint16_t *dest); // Read 32-pixel row into dest
 
 #endif // MLX90640_H

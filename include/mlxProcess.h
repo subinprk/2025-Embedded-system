@@ -46,4 +46,7 @@ void MLX_process_and_report(void);
 // Get simple statistics from current frame
 void MLX_get_stats(uint16_t *min_val, uint16_t *max_val, uint16_t *avg_val);
 
+// Process buffered frame and send hotspot info over UART (no I2C inside)
+void MLX_process_buffer_and_report(uint16_t *frame);
+
 #endif // MLX_PROCESS_H

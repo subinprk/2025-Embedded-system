@@ -224,3 +224,85 @@ void MLX_process_and_report(void)
              centroid.x_fp, centroid.y_fp, centroid.max_value);
     USART2_sendString(buffer);
 }
+
+
+
+
+
+
+// Compute stats and centroid from buffered frame (no I2C inside)
+void MLX_process_buffer_and_report(uint16_t *frame)
+{
+    char buffer[96];
+
+    uint16_t min_v = 0xFFFF;
+    uint16_t max_v = 0;
+    uint32_t sum = 0;
+    uint16_t count = 0;
+
+    for (uint16_t i = 0; i < MLX_TOTAL; i++) {
+        uint16_t px = frame[i];
+        if (px == 0xFFFF) continue;
+        if (px < min_v) min_v = px;
+        if (px > max_v) max_v = px;
+        sum += px;
+        count++;
+    }
+
+    if (count == 0) {
+        USART2_sendString("\r\n=== Hotspot Detection (buffered) ===\r\nNo valid pixels in frame.\r\n");
+        return;
+    }
+
+    // Derive threshold (top 20%)
+    uint16_t range = max_v - min_v;
+    uint16_t threshold = max_v - ((uint32_t)range * 20U / 100U);
+
+    uint32_t sum_wx = 0;
+    uint32_t sum_wy = 0;
+    uint32_t sum_w = 0;
+
+    uint8_t max_x = 0, max_y = 0;
+    for (uint16_t i = 0; i < MLX_TOTAL; i++) {
+        uint16_t px = frame[i];
+        if (px == 0xFFFF) continue;
+
+        if (px > max_v) {
+            max_v = px;
+            max_x = i % MLX_WIDTH;
+            max_y = i / MLX_WIDTH;
+        }
+
+        if (px > threshold) {
+            uint8_t x = i % MLX_WIDTH;
+            uint8_t y = i / MLX_WIDTH;
+            uint16_t w = px - threshold;
+            sum_wx += (uint32_t)x * w;
+            sum_wy += (uint32_t)y * w;
+            sum_w += w;
+        }
+    }
+
+    uint16_t avg_v = (uint16_t)(sum / count);
+
+    uint16_t cx_fp = (sum_w > 0) ? (uint16_t)((sum_wx * 256UL) / sum_w) : (MLX_WIDTH / 2) * 256;
+    uint16_t cy_fp = (sum_w > 0) ? (uint16_t)((sum_wy * 256UL) / sum_w) : (MLX_HEIGHT / 2) * 256;
+
+    uint8_t cx_int = cx_fp / 256;
+    uint8_t cx_dec = (uint8_t)(((uint16_t)(cx_fp % 256) * 100) / 256);
+    uint8_t cy_int = cy_fp / 256;
+    uint8_t cy_dec = (uint8_t)(((uint16_t)(cy_fp % 256) * 100) / 256);
+
+    USART2_sendString("\r\n=== Hotspot Detection (buffered) ===\r\n");
+    snprintf(buffer, sizeof(buffer), "Max pixel: (%u, %u) = %u\r\n", max_x, max_y, max_v);
+    USART2_sendString(buffer);
+
+    snprintf(buffer, sizeof(buffer), "Hot centroid: (%u.%02u, %u.%02u)\r\n", cx_int, cx_dec, cy_int, cy_dec);
+    USART2_sendString(buffer);
+
+    snprintf(buffer, sizeof(buffer), "Threshold: %u, Max: %u, Min: %u, Avg: %u\r\n", threshold, max_v, min_v, avg_v);
+    USART2_sendString(buffer);
+
+    snprintf(buffer, sizeof(buffer), "HOTSPOT:%u,%u,%u\r\n", cx_fp, cy_fp, max_v);
+    USART2_sendString(buffer);
+}
