@@ -1,10 +1,10 @@
 MCU=atmega4809
-CC=avr-gcc
+CC=D:\avr-gcc-15.2.0-x64-windows\avr-gcc-15.2.0-x64-windows\bin\avr-gcc.exe
 # Clock: 16MHz (prescaler disabled in software)
 # Base oscillator is 16MHz (OSCCFG fuse), we disable /6 prescaler in clock_init()
 CFLAGS=-mmcu=$(MCU) -Os -DF_CPU=16000000UL -DBAUD_RATE=9600
-OBJCOPY=avr-objcopy
-AVRDUDE=avrdude
+OBJCOPY=D:\avr-gcc-15.2.0-x64-windows\avr-gcc-15.2.0-x64-windows\bin\avr-objcopy.exe
+AVRDUDE=D:\avr-gcc-15.2.0-x64-windows\avr-gcc-15.2.0-x64-windows\bin\avrdude.exe
 
 PROGRAMMER=jtag2updi
 PORT=COM4    # ← UNO가 잡힌 포트로 맞춰줘!

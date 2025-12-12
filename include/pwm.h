@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 #include <avr/io.h>
+#include "../include/flags.h"
 
 // Motor A pin masks (PORTC)
 #define MOTOR_A_IN1_bm PIN0_bm
@@ -36,5 +37,7 @@ void motorB_set(int8_t speed);
 void motorB_forward(void);
 void motorB_backward(void);
 void motorB_stop(void);
+
+void task_pwm_update(void);
 
 #endif // PWM_H

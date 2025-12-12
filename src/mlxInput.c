@@ -68,47 +68,6 @@ void debug_MLX_read16(uint16_t reg)
     USART2_sendString(buffer);
 }
 
-//======== MPU6050 Functions ========
-
-#define MPU6050_ADDR 0x68
-
-uint8_t MPU6050_read8(uint8_t reg)
-{
-    uint8_t result;
-    
-    result = TWI0_start((MPU6050_ADDR << 1) | 0);
-    if (!result) {
-        TWI0_stop();
-        TWI0_reset_bus();
-        return 0xFF;
-    }
-    
-    result = TWI0_write(reg);
-    if (!result) {
-        TWI0_stop();
-        TWI0_reset_bus();
-        return 0xFF;
-    }
-
-    result = TWI0_start((MPU6050_ADDR << 1) | 1);
-    if (!result) {
-        TWI0_stop();
-        TWI0_reset_bus();
-        return 0xFF;
-    }
-    
-    uint8_t data = TWI0_read_nack();
-    _delay_us(100);
-    return data;
-}
-
-void debug_MPU6050_read8(uint8_t reg, const char *label)
-{
-    uint8_t value = MPU6050_read8(reg);
-    char buffer[40];
-    snprintf(buffer, sizeof(buffer), "%s: 0x%02X\r\n", label, value);
-    USART2_sendString(buffer);
-}
 
 //======== MLX90640 Frame Functions ========
 
@@ -125,6 +84,13 @@ uint8_t MLX_wait_for_data(void)
         _delay_ms(1);
     }
     return 0;
+}
+
+// Non-blocking poll: returns 1 if new frame ready, 0 otherwise
+uint8_t MLX_poll_data_ready(void)
+{
+    uint16_t status = MLX_read16(MLX_STATUS_REG);
+    return (status & 0x0008) ? 1 : 0;
 }
 
 void MLX_read_burst(uint16_t reg, uint8_t *buffer, uint16_t count)
@@ -154,6 +120,19 @@ void MLX_read_burst(uint16_t reg, uint8_t *buffer, uint16_t count)
     buffer[count - 1] = TWI0_read_nack();
     
     _delay_us(100);
+}
+
+// Read one MLX row (32 pixels) into dest[32]
+void MLX_read_row(uint8_t row_index, uint16_t *dest)
+{
+    uint16_t start_reg = MLX_RAM_START + ((uint16_t)row_index * 32);
+    uint8_t raw[64];
+
+    MLX_read_burst(start_reg, raw, sizeof(raw));
+
+    for (uint8_t i = 0; i < 32; i++) {
+        dest[i] = ((uint16_t)raw[i * 2] << 8) | raw[(i * 2) + 1];
+    }
 }
 
 void MLX_send_frame_to_pc(void)
