@@ -1,6 +1,6 @@
+#include <avr/interrupt.h>
 #include <avr/io.h>
 #include <util/delay.h>
-#include <avr/interrupt.h>
 #include <stdio.h>
 #include "../include/uart.h"
 #include "../include/twi.h"
@@ -10,6 +10,9 @@
 #include "../include/pwm.h"
 #include "../include/interrupt.h"
 #include "../include/debugging.h"
+
+// runtime ISR counter removed; scheduler-driven tasks used instead
+
 
 // Function to set CPU clock to maximum speed (16MHz or 20MHz depending on Vcc)
 void clock_init(void)
@@ -34,21 +37,12 @@ int main(void)
     clock_init();
     _delay_ms(100); 
     USART2_init();
+    timer_init_1khz();
 
     // ===== Hardware sanity test (blocking) =====
     // Configure LED pin early
     PORTF.DIRSET = PIN5_bm;
-
-    // Blink LED 3 times + send UART message to confirm clock/UART/GPIO work
-    USART2_sendString("\r\n### STARTUP SANITY ###\r\n");
-    for (uint8_t i = 0; i < 3; i++) {
-        PORTF.OUTSET = PIN5_bm;   // LED on
-        _delay_ms(200);
-        PORTF.OUTCLR = PIN5_bm;   // LED off
-        _delay_ms(200);
-    }
-    USART2_sendString("LED blink done, proceeding...\r\n");
-    // ============================================
+    PORTF.OUTCLR = PIN5_bm; // LED off
 
     TWI0_init();
     motor_init();
@@ -56,46 +50,17 @@ int main(void)
     _delay_ms(100);
     
     // Aggressive I2C bus recovery at startup
-    for (uint8_t i = 0; i < 3; i++) {
+    for (uint8_t i = 0; i < 5; i++) {
         TWI0_reset_bus();
         _delay_ms(50);
     }
-    
-    // initial_debugging();
-    // Initialize motor driver pins
-   
-    // Main cooperative loop: service tasks when flags are set
-    // uint16_t loop_cnt = 0;
-    // char dbg[32];
-    
-    // Re-enable interrupts in case something disabled them
-    // sei();
-    // TCB0.INTFLAGS = TCB_CAPT_bm;
-    // USART2_sendString("[MAIN LOOP START - sei() called]\r\n");
 
     initial_debugging();
     while (1)
     {
-        //         char buf[64];
-        //     snprintf(buf, sizeof(buf),
-        //         "PORTMUX_TCBROUTEA = %02X\r\n",
-        //         PORTMUX.TCBROUTEA);
-        //     USART2_sendString(buf);
         scheduler_service_tasks();
 
-        // static uint16_t last_cnt = 0;
-        // static uint16_t dbg_print = 0;
-
-        // dbg_print++;
-        // if (dbg_print >= 10000) {
-        //     dbg_print = 0;
-        //     char b[64];
-        //     uint16_t cnt = TCB0.CNT;
-        //     uint8_t flags = TCB0.INTFLAGS;
-        //     snprintf(b, sizeof(b), "CNT=%u FLAGS=%02X\r\n", cnt, flags);
-        //     USART2_sendString(b);
-        //     last_cnt = cnt;
-        // }
+        // Clean main loop: scheduler services tasks. Debug prints removed.
 
             //         char b[64];
             // snprintf(b, sizeof(b),
@@ -118,8 +83,4 @@ int main(void)
     }
 }
 
-ISR(TCB0_INT_vect)
-{
-    TCB0.INTFLAGS = TCB_CAPT_bm;
-    PORTF.OUTTGL = PIN5_bm;   // toggle LED
-}
+// ISR handled in interrupt.c; scheduler will service tasks

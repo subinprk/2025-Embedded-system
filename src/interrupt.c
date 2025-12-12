@@ -38,9 +38,9 @@ void timer_init_1khz(void)
     // CLK_PER/2 = 8 MHz
     // CCMP = 7999 gives 1 kHz (8000000 / 8000 = 1000 Hz)
     // Enable routing of TCB0 interrupt to CPU
-    PORTMUX.TCBROUTEA |= PORTMUX_TCB0_bm;
+    // PORTMUX.TCBROUTEA |= PORTMUX_TCB0_bm;
     TCB0.CTRLA = 0;  // Disable first
-    TCB0.CTRLB = 0x00;  // Periodic Interrupt mode (CNTMODE = 0b000)
+    TCB0.CTRLB = TCB_CNTMODE_INT_gc;  // Periodic Interrupt mode (CNTMODE = 0b000)
     TCB0.CCMP = 7999;
     TCB0.CNT = 0;  // Clear counter
     TCB0.INTFLAGS = TCB_CAPT_bm;  // Clear any pending interrupt
@@ -49,44 +49,44 @@ void timer_init_1khz(void)
     
     // Debug: confirm register values
     char buf[80];
-    snprintf(buf, sizeof(buf), "TCB0: CTRLA=%02X CTRLB=%02X INTCTRL=%02X CCMP=%u CNT=%u\r\n", 
-        TCB0.CTRLA, TCB0.CTRLB, TCB0.INTCTRL, TCB0.CCMP, TCB0.CNT);
+    snprintf(buf, sizeof(buf), "TCB0: CTRLA=%02X CTRLB=%02X INTCTRL=%02X CCMP=%u CNT=%u\r\n CPUINT CTRLA=%02X LVL0PRI=%02X \r\n", 
+        TCB0.CTRLA, TCB0.CTRLB, TCB0.INTCTRL, TCB0.CCMP, TCB0.CNT, CPUINT.CTRLA, CPUINT.LVL0PRI);
     USART2_sendString(buf);
 }
 
-// ISR(TCB0_INT_vect)
-// {
-//     static uint16_t ms_counter = 0;
-//     static uint8_t isr_announced = 0;
-//     TCB0.INTFLAGS = TCB_CAPT_bm; // Clear flag
+ISR(TCB0_INT_vect)
+{
+    static uint16_t ms_counter = 0;
+    static uint8_t isr_announced = 0;
+    TCB0.INTFLAGS = TCB_CAPT_bm; // Clear flag
 
-//     ms_counter++;
+    ms_counter++;
 
-//     // One-time ISR confirmation
-//     if (!isr_announced) {
-//         isr_announced = 1;
-//         PORTF.OUTTGL = PIN5_bm; // Quick LED toggle to confirm ISR runs
-//     }
-//     if (ms_counter > 1000) {
-//         ms_counter = 0; 
-//     }
-//     // 50 ms: MPU poll
-//     if ((ms_counter % 50) == 0) {
-//         sched_flags.mpu_due = true;
-//     }
-//     // 200 ms: MLX frame handling (avoid swamping I2C)
-//     if ((ms_counter % 200) == 0) {
-//         sched_flags.mlx_due = true;
-//     }
-//     // 20 ms: motor pattern step
-//     if ((ms_counter % 20) == 0) {
-//         sched_flags.pwm_due = true;
-//     }
-//     // 500 ms: LED heartbeat
-//     if ((ms_counter % 500) == 0) {
-//         sched_flags.led_due = true;
-//     }
-// }
+    // One-time ISR confirmation
+    if (!isr_announced) {
+        isr_announced = 1;
+        PORTF.OUTTGL = PIN5_bm; // Quick LED toggle to confirm ISR runs
+    }
+    if (ms_counter > 1000) {
+        ms_counter = 0; 
+    }
+    // 50 ms: MPU poll
+    if ((ms_counter % 50) == 0) {
+        sched_flags.mpu_due = true;
+    }
+    // 200 ms: MLX frame handling (avoid swamping I2C)
+    if ((ms_counter % 200) == 0) {
+        sched_flags.mlx_due = true;
+    }
+    // 20 ms: motor pattern step
+    if ((ms_counter % 20) == 0) {
+        sched_flags.pwm_due = true;
+    }
+    // 500 ms: LED heartbeat
+    if ((ms_counter % 500) == 0) {
+        sched_flags.led_due = true;
+    }
+}
 
 // Non-blocking task handlers (called from main loop)
 static void task_mlx_frame(void)
@@ -174,11 +174,24 @@ void scheduler_init(void)
 
     mlx_ctx.state = MLX_STATE_WAIT_READY;
     mlx_ctx.current_row = 0;
+    /*
+     * Configure CPU Interrupt Controller:
+     * - Clear CTRLA to use application vector table (IVSEL=0)
+     * - Allow level-0 interrupts by setting LVL0PRI (enable all)
+     * - Enable optional round-robin scheduling for level-0
+     */
+    CPUINT.CTRLA = 0x00;            // ensure IVSEL/CVT cleared
+    CPUINT.LVL0PRI = 0xFF;          // allow level-0 servicing for all groups
+    CPUINT.CTRLA |= CPUINT_LVL0RR_bm; // enable round-robin for level-0
 
-    timer_init_1khz();
-    USART2_sendString("[TIMER INIT OK]\r\n");
+    // timer_init_1khz();
     sei();
-    TCB0.INTFLAGS = TCB_CAPT_bm;
+
+    // Report final CPUINT state
+    char final_buf[64];
+    snprintf(final_buf, sizeof(final_buf), "CPUINT CTRLA=%02X LVL0PRI=%02X STATUS=%02X\r\n",
+        CPUINT.CTRLA, CPUINT.LVL0PRI, CPUINT.STATUS);
+    USART2_sendString(final_buf);
     USART2_sendString("[SEI DONE]\r\n");
 }
 
@@ -205,11 +218,12 @@ void scheduler_service_tasks(void)
         USART2_sendString("[PWM]\r\n");
         task_pwm_update();
     }
-    // Temporarily disabled to isolate crash source
-    // if (sched_flags.mpu_due) {
-    //     USART2_sendString("[MPU]\r\n");
-    //     task_mpu_sample();
-    // }
+    // Re-enable MPU sampling only (keep MLX disabled for now)
+    if (sched_flags.mpu_due) {
+        USART2_sendString("[MPU]\r\n");
+        task_mpu_sample();
+    }
+    // Keep MLX disabled for isolation
     // if (sched_flags.mlx_due) {
     //     USART2_sendString("[MLX]\r\n");
     //     task_mlx_frame();

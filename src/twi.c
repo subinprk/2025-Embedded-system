@@ -96,7 +96,6 @@ void TWI0_debug_status(void)
 
 void TWI0_scan(void)
 {
-    TWI_DEBUG_SEND_STRING("\r\nScanning I2C bus...\r\n");
     char buffer[30];
     uint8_t found = 0;
     
