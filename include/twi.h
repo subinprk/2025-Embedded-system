@@ -16,6 +16,8 @@ uint8_t TWI0_write(uint8_t data);
 uint8_t TWI0_read_ack(void);
 uint8_t TWI0_read_nack(void);
 void TWI0_debug_status(void);
+void TWI0_debug_status_detailed(void);
 void TWI0_scan(void);
+void TWI0_clock_pulse_stop(void);
 
 #endif // TWI_H

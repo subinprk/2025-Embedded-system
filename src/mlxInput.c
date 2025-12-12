@@ -174,6 +174,9 @@ void MLX_send_frame_to_pc(void)
     }
     
     USART2_sendString("FRAME_END\r\n");
+    // After completing the MLX frame transfer, perform a light I2C recovery
+    // to ensure the bus is released by any stuck slave devices.
+    TWI0_clock_pulse_stop();
     
     if (error_count > 0) {
         snprintf(buffer, sizeof(buffer), "Errors: %u\r\n", error_count);

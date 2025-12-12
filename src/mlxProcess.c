@@ -50,6 +50,12 @@ void MLX_find_max_pixel(uint8_t *max_x, uint8_t *max_y, uint16_t *max_value)
         }
     }
     
+    // Ensure bus is fully released
+    TWI0_stop();
+    _delay_us(100);
+    TWI0_clock_pulse_stop();
+    _delay_ms(5);
+    
     *max_x = mx;
     *max_y = my;
     *max_value = max_val;
@@ -84,6 +90,12 @@ void MLX_get_stats(uint16_t *min_val, uint16_t *max_val, uint16_t *avg_val)
             _delay_ms(1);
         }
     }
+    
+    // Ensure bus is fully released
+    TWI0_stop();
+    _delay_us(100);
+    TWI0_clock_pulse_stop();
+    _delay_ms(5);
     
     *min_val = min_v;
     *max_val = max_v;
@@ -144,6 +156,12 @@ CentroidResult MLX_find_hot_centroid(uint16_t threshold)
             _delay_ms(1);
         }
     }
+    
+    // Ensure bus is fully released
+    TWI0_stop();
+    _delay_us(100);
+    TWI0_clock_pulse_stop();
+    _delay_ms(5);
     
     result.max_value = max_val;
     
@@ -223,6 +241,12 @@ void MLX_process_and_report(void)
     snprintf(buffer, sizeof(buffer), "HOTSPOT:%u,%u,%u\r\n",
              centroid.x_fp, centroid.y_fp, centroid.max_value);
     USART2_sendString(buffer);
+    
+    // CRITICAL: Ensure I2C bus is completely released
+    TWI0_stop();
+    _delay_us(100);
+    TWI0_clock_pulse_stop();
+    _delay_ms(10);
 }
 
 

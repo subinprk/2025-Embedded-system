@@ -10,6 +10,7 @@
 #include "../include/pwm.h"
 #include "../include/interrupt.h"
 #include "../include/debugging.h"
+#include "../include/drive.h"
 
 // runtime ISR counter removed; scheduler-driven tasks used instead
 
@@ -37,7 +38,7 @@ int main(void)
     clock_init();
     _delay_ms(100); 
     USART2_init();
-    timer_init_1khz();
+    // timer_init_1khz();
 
     // ===== Hardware sanity test (blocking) =====
     // Configure LED pin early
@@ -46,7 +47,8 @@ int main(void)
 
     TWI0_init();
     motor_init();
-    scheduler_init();
+        drive_init();
+    // scheduler_init();
     _delay_ms(100);
     
     // Aggressive I2C bus recovery at startup
@@ -56,30 +58,17 @@ int main(void)
     }
 
     initial_debugging();
+    int loop_count = 0;
     while (1)
     {
         scheduler_service_tasks();
-
-        // Clean main loop: scheduler services tasks. Debug prints removed.
-
-            //         char b[64];
-            // snprintf(b, sizeof(b),
-            // "INTCTRL=%02X CTRLA=%02X CNT=%u FLAGS=%02X\r\n",
-            // TCB0.INTCTRL, TCB0.CTRLA, TCB0.CNT, TCB0.INTFLAGS);
-            // USART2_sendString(b);
-
-
-
-        // Every 50000 loops, print a heartbeat to confirm loop is running
-        // loop_cnt++;
-        // if (loop_cnt == 0) {  // wraps every 65536
-        //     // Check SREG I-bit
-        //     if (SREG & 0x80) {
-        //         USART2_sendString("I=1\r\n");
-        //     } else {
-        //         USART2_sendString("I=0\r\n");
-        //     }
-        // }
+        sensor_loop_debugging(loop_count);
+        pwm_loop_debugging(loop_count);
+            drive_update();
+        loop_count++;
+        if (loop_count >= 10000) {
+            loop_count = 0;
+        }
     }
 }
 
