@@ -16,9 +16,20 @@
 #define MLX_STATUS_REG   0x8000
 #define MLX_CTRL_REG1    0x800D
 
+// Frame rate options (bits 10:7 in CTRL_REG1)
+#define MLX_FRAMERATE_0_5HZ   0  // 0.5 Hz
+#define MLX_FRAMERATE_1HZ     1  // 1 Hz
+#define MLX_FRAMERATE_2HZ     2  // 2 Hz (default)
+#define MLX_FRAMERATE_4HZ     3  // 4 Hz
+#define MLX_FRAMERATE_8HZ     4  // 8 Hz
+#define MLX_FRAMERATE_16HZ    5  // 16 Hz
+#define MLX_FRAMERATE_32HZ    6  // 32 Hz
+#define MLX_FRAMERATE_64HZ    7  // 64 Hz
+
 //======== MLX90640 function prototypes ========
 uint16_t MLX_read16(uint16_t reg);
 void debug_MLX_read16(uint16_t reg);
+void MLX_set_framerate(uint8_t rate);       // Set frame rate (use MLX_FRAMERATE_* constants)
 void MLX_read_frame(uint16_t *buffer);      // Read one subpage (384 pixels)
 void MLX_send_frame_to_pc(void);            // Send raw frame data over UART
 uint8_t MLX_wait_for_data(void);            // Wait for new frame ready

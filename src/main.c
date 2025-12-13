@@ -38,7 +38,7 @@ int main(void)
     clock_init();
     _delay_ms(100); 
     USART2_init();
-    // timer_init_1khz();
+    timer_init_1khz();
 
     // ===== Hardware sanity test (blocking) =====
     // Configure LED pin early
@@ -48,8 +48,13 @@ int main(void)
     TWI0_init();
     motor_init();
         drive_init();
-    // scheduler_init();
+    scheduler_init();
     _delay_ms(100);
+    
+    // Set MLX90640 to 16Hz frame rate for faster data acquisition
+    USART2_sendString("Setting MLX90640 to 16Hz...\r\n");
+    MLX_set_framerate(MLX_FRAMERATE_16HZ);
+    USART2_sendString("MLX90640 configured.\r\n");
     
     // Aggressive I2C bus recovery at startup
     for (uint8_t i = 0; i < 5; i++) {
@@ -62,14 +67,8 @@ int main(void)
     while (1)
     {
         scheduler_service_tasks();
-        sensor_loop_debugging(loop_count);
-        pwm_loop_debugging(loop_count);
-            drive_update();
-        loop_count++;
-        if (loop_count >= 10000) {
-            loop_count = 0;
-        }
+        // sensor_loop_debugging(loop_count);
+        // pwm_loop_debugging(loop_count);
+        drive_update();
     }
 }
-
-// ISR handled in interrupt.c; scheduler will service tasks

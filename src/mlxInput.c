@@ -54,7 +54,7 @@ uint16_t MLX_read16(uint16_t reg)
     hi = TWI0_read_ack();
     lo = TWI0_read_nack();
     
-    _delay_us(100);
+    _delay_us(50);  // Reduced from 100us for faster reads
 
     return (hi << 8) | lo;
 }
@@ -93,6 +93,35 @@ uint8_t MLX_poll_data_ready(void)
     return (status & 0x0008) ? 1 : 0;
 }
 
+// Set MLX90640 frame rate
+// rate: 0=0.5Hz, 1=1Hz, 2=2Hz, 3=4Hz, 4=8Hz, 5=16Hz, 6=32Hz, 7=64Hz
+void MLX_set_framerate(uint8_t rate)
+{
+    if (rate > 7) rate = 7;  // Clamp to valid range
+    
+    // Read current control register
+    uint16_t ctrl = MLX_read16(MLX_CTRL_REG1);
+    
+    // Clear bits 10:7 and set new rate
+    ctrl &= ~(0x7 << 7);  // Clear bits 10:7
+    ctrl |= (rate << 7);  // Set new rate
+    
+    // Write back to control register
+    uint8_t result = TWI0_start((MLX_ADDR << 1) | 0);
+    if (!result) {
+        TWI0_stop();
+        return;
+    }
+    
+    TWI0_write(MLX_CTRL_REG1 >> 8);
+    TWI0_write(MLX_CTRL_REG1 & 0xFF);
+    TWI0_write(ctrl >> 8);
+    TWI0_write(ctrl & 0xFF);
+    TWI0_stop();
+    
+    _delay_ms(10);  // Wait for setting to take effect
+}
+
 void MLX_read_burst(uint16_t reg, uint8_t *buffer, uint16_t count)
 {
     uint8_t result;
@@ -119,7 +148,7 @@ void MLX_read_burst(uint16_t reg, uint8_t *buffer, uint16_t count)
     }
     buffer[count - 1] = TWI0_read_nack();
     
-    _delay_us(100);
+    _delay_us(50);  // Reduced from 100us for faster burst reads
 }
 
 // Read one MLX row (32 pixels) into dest[32]

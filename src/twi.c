@@ -4,8 +4,9 @@
 #include <util/delay.h>
 
 #define TWI_TIMEOUT 50000  // Timeout counter (증가: 10000 → 50000)
-// Use a safer I2C speed for mixed devices (MLX90640 + MPU6050); 75 ~= 100kHz @16MHz
-#define TWI0_BAUD 75
+// Faster I2C speed for better MLX throughput; 25 ~= 266kHz @16MHz
+// MLX90640 supports up to 1MHz, MPU6050 supports 400kHz
+#define TWI0_BAUD 25
 
 // Debug UART wrapper macros based on TWI_DEBUG_UART setting
 #if TWI_DEBUG_ENABLE

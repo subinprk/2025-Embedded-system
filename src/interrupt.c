@@ -1,4 +1,6 @@
 #include "../include/interrupt.h"
+#include <util/delay.h>
+#include <stdbool.h>
 
 // Definition of the global scheduler flags (declared extern in flags.h)
 SchedulerFlags sched_flags = {0};
@@ -6,8 +8,11 @@ SchedulerFlags sched_flags = {0};
 static struct {
     MlxState state;
     uint8_t current_row;
-    uint16_t frame[MLX_TOTAL];
-} mlx_ctx = { .state = MLX_STATE_WAIT_READY, .current_row = 0, .frame = {0} };
+    uint8_t active_idx;   // buffer being filled
+    uint8_t ready_idx;    // buffer ready for processing
+    bool frame_ready;     // true when a full frame is ready to process
+    uint16_t frame[2][MLX_TOTAL]; // double buffer: ping-pong
+} mlx_ctx = { .state = MLX_STATE_WAIT_READY, .current_row = 0, .active_idx = 0, .ready_idx = 0, .frame_ready = false, .frame = {{0}} };
 
 // Send buffered frame to PC (no I2C)
 static void MLX_send_buffer_to_pc(uint16_t *frame)
@@ -74,8 +79,8 @@ ISR(TCB0_INT_vect)
     if ((ms_counter % 50) == 0) {
         sched_flags.mpu_due = true;
     }
-    // 200 ms: MLX frame handling (avoid swamping I2C)
-    if ((ms_counter % 200) == 0) {
+    // 10 ms: MLX service (tighter loop for faster capture)
+    if ((ms_counter % 10) == 0) {
         sched_flags.mlx_due = true;
     }
     // 20 ms: motor pattern step
@@ -93,35 +98,44 @@ static void task_mlx_frame(void)
 {
     sched_flags.mlx_due = false;
 
+    // If a completed frame exists and bus is idle, process it while next frame is being prepared
+    if (mlx_ctx.frame_ready && mlx_ctx.state != MLX_STATE_READ_ROWS) {
+        MLX_process_buffer_and_report(mlx_ctx.frame[mlx_ctx.ready_idx]);
+        // MLX_send_buffer_to_pc(mlx_ctx.frame[mlx_ctx.ready_idx]);
+        mlx_ctx.frame_ready = false;
+    }
+
     switch (mlx_ctx.state) {
         case MLX_STATE_WAIT_READY:
             // Check once; if ready, start incremental read
             if (MLX_poll_data_ready()) {
                 mlx_ctx.state = MLX_STATE_READ_ROWS;
                 mlx_ctx.current_row = 0;
+                // Toggle to the other buffer for ping-pong
+                mlx_ctx.active_idx ^= 1;
             }
             break;
 
         case MLX_STATE_READ_ROWS:
-            // Read one row per service call to stay non-blocking
-            MLX_read_row(mlx_ctx.current_row, &mlx_ctx.frame[(uint16_t)mlx_ctx.current_row * MLX_WIDTH]);
-            mlx_ctx.current_row++;
+            // Read multiple rows per service call for faster capture
+            for (uint8_t i = 0; i < 12 && mlx_ctx.current_row < MLX_HEIGHT; i++) {
+                MLX_read_row(mlx_ctx.current_row,
+                    &mlx_ctx.frame[mlx_ctx.active_idx][(uint16_t)mlx_ctx.current_row * MLX_WIDTH]);
+                mlx_ctx.current_row++;
+            }
 
-            // Reset bus periodically to avoid lockups
-            if ((mlx_ctx.current_row % 4) == 0) {
+            // Reset bus every 12 rows to avoid lockups (short wait only)
+            if ((mlx_ctx.current_row % 12) == 0) {
                 TWI0_reset_bus();
+                _delay_us(100);
             }
 
             if (mlx_ctx.current_row >= MLX_HEIGHT) {
-                mlx_ctx.state = MLX_STATE_PROCESS;
+                // Mark buffer ready and return to WAIT_READY to pipeline next capture
+                mlx_ctx.ready_idx = mlx_ctx.active_idx;
+                mlx_ctx.frame_ready = true;
+                mlx_ctx.state = MLX_STATE_WAIT_READY;
             }
-            break;
-
-        case MLX_STATE_PROCESS:
-            // Process buffered frame and report
-            MLX_process_buffer_and_report(mlx_ctx.frame);
-            MLX_send_buffer_to_pc(mlx_ctx.frame);
-            mlx_ctx.state = MLX_STATE_WAIT_READY;
             break;
 
         case MLX_STATE_IDLE:
@@ -197,18 +211,6 @@ void scheduler_init(void)
 
 void scheduler_service_tasks(void)
 {
-    // Debug: print flag states occasionally
-    static uint16_t dbg_cnt = 0;
-    dbg_cnt++;
-    if (dbg_cnt >= 50000) {
-        dbg_cnt = 0;
-        char buf[40];
-        snprintf(buf, sizeof(buf), "F:%d%d%d%d\r\n", 
-            sched_flags.led_due, sched_flags.pwm_due, 
-            sched_flags.mpu_due, sched_flags.mlx_due);
-        USART2_sendString(buf);
-    }
-
     if (sched_flags.led_due) {
         USART2_sendString("[LED]\r\n");
         task_led_toggle();
@@ -224,10 +226,10 @@ void scheduler_service_tasks(void)
         task_mpu_sample();
     }
     // Keep MLX disabled for isolation
-    // if (sched_flags.mlx_due) {
-    //     USART2_sendString("[MLX]\r\n");
-    //     task_mlx_frame();
-    // }
+    if (sched_flags.mlx_due) {
+        USART2_sendString("[MLX]\r\n");
+        task_mlx_frame();
+    }
     sched_flags.mpu_due = false;
     sched_flags.mlx_due = false;
 }
