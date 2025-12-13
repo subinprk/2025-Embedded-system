@@ -53,7 +53,7 @@ int main(void)
     
     // Set MLX90640 to 16Hz frame rate for faster data acquisition
     USART2_sendString("Setting MLX90640 to 16Hz...\r\n");
-    MLX_set_framerate(MLX_FRAMERATE_16HZ);
+    MLX_set_framerate(MLX_FRAMERATE_32HZ);
     USART2_sendString("MLX90640 configured.\r\n");
     
     // Aggressive I2C bus recovery at startup

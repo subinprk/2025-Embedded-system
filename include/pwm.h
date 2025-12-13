@@ -25,15 +25,17 @@
 void motor_init(void);
 
 // Set motor A speed/direction. Range -100..100 (negative = reverse).
-// Note: this implementation uses digital outputs (no hardware PWM).
-// Any non-zero value turns the motor on in the requested direction.
+// Note: this implementation uses digital outputs with PWM-style duty cycle modulation.
+// Speed 100 = always on, 50 = 50% duty cycle, 0 = always off.
 void motorA_set(int8_t speed);
+void motorA_set_speed(int8_t speed);
 void motorA_forward(void);
 void motorA_backward(void);
 void motorA_stop(void);
 
 // Set motor B speed/direction. Range -100..100 (negative = reverse).
 void motorB_set(int8_t speed);
+void motorB_set_speed(int8_t speed);
 void motorB_forward(void);
 void motorB_backward(void);
 void motorB_stop(void);

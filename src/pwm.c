@@ -1,7 +1,23 @@
 // pwm.c
-// Basic motor control for Double L9100S using digital pins
+// Motor control with speed regulation for Double L9100S using digital pins
 
 #include "../include/pwm.h"
+
+// Motor speed storage (range: -100 to 100)
+// positive = forward, negative = backward
+static volatile int8_t motorA_speed = 0;
+static volatile int8_t motorB_speed = 0;
+
+// PWM counter for duty cycle (0-9, 10 steps per 20ms = 2ms per step)
+static volatile uint8_t pwm_tick = 0;
+
+// Helper function: get duty cycle from speed (0-10, where 10 = 100%)
+static uint8_t get_duty_cycle(int8_t speed)
+{
+    uint8_t abs_speed = (speed < 0) ? -speed : speed;
+    // Convert 0-100 to 0-10 duty cycles
+    return (abs_speed * 10) / 100;
+}
 
 // Initialize motor pins as outputs and set them low (coast)
 void motor_init(void)
@@ -47,6 +63,15 @@ void motorA_set(int8_t speed)
     }
 }
 
+// Store motor A speed for PWM control (range -100 to 100)
+void motorA_set_speed(int8_t speed)
+{
+    // Clamp to valid range
+    if (speed > 100) speed = 100;
+    if (speed < -100) speed = -100;
+    motorA_speed = speed;
+}
+
 // Motor B control (digital only)
 void motorB_forward(void)
 {
@@ -78,28 +103,61 @@ void motorB_set(int8_t speed)
     }
 }
 
+// Store motor B speed for PWM control (range -100 to 100)
+void motorB_set_speed(int8_t speed)
+{
+    // Clamp to valid range
+    if (speed > 100) speed = 100;
+    if (speed < -100) speed = -100;
+    motorB_speed = speed;
+}
+
+// PWM update task: called every 20ms from ISR
+// Implements duty-cycle based speed control by toggling motor on/off
 void task_pwm_update(void)
 {
     sched_flags.pwm_due = false;
 
-    static uint8_t motor_phase = 0;
-    switch (motor_phase) {
-        case 0:
+    pwm_tick++;
+    if (pwm_tick >= 10) pwm_tick = 0;  // 10 steps per 20ms = 2ms per step
+
+    // Motor A PWM control
+    uint8_t duty_a = get_duty_cycle(motorA_speed);
+    if (motorA_speed > 0) {
+        // Forward: ON for duty_a steps, OFF for (10-duty_a) steps
+        if (pwm_tick < duty_a) {
             motorA_forward();
-            motorB_forward();
-            break;
-        case 1:
+        } else {
             motorA_stop();
-            motorB_stop();
-            break;
-        case 2:
+        }
+    } else if (motorA_speed < 0) {
+        // Backward: ON for duty_a steps, OFF for (10-duty_a) steps
+        if (pwm_tick < duty_a) {
             motorA_backward();
-            motorB_backward();
-            break;
-        case 3:
-            motorA_forward();
-            motorB_backward();
-            break;
+        } else {
+            motorA_stop();
+        }
+    } else {
+        motorA_stop();
     }
-    motor_phase = (motor_phase + 1) & 0x03;
+
+    // Motor B PWM control
+    uint8_t duty_b = get_duty_cycle(motorB_speed);
+    if (motorB_speed > 0) {
+        // Forward: ON for duty_b steps, OFF for (10-duty_b) steps
+        if (pwm_tick < duty_b) {
+            motorB_forward();
+        } else {
+            motorB_stop();
+        }
+    } else if (motorB_speed < 0) {
+        // Backward: ON for duty_b steps, OFF for (10-duty_b) steps
+        if (pwm_tick < duty_b) {
+            motorB_backward();
+        } else {
+            motorB_stop();
+        }
+    } else {
+        motorB_stop();
+    }
 }

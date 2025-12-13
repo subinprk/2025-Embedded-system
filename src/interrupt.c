@@ -79,8 +79,8 @@ ISR(TCB0_INT_vect)
     if ((ms_counter % 50) == 0) {
         sched_flags.mpu_due = true;
     }
-    // 10 ms: MLX service (tighter loop for faster capture)
-    if ((ms_counter % 10) == 0) {
+    // 8 ms: MLX service (tighter loop for faster capture)
+    if ((ms_counter % 8) == 0) {
         sched_flags.mlx_due = true;
     }
     // 20 ms: motor pattern step
