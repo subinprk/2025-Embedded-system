@@ -51,12 +51,7 @@ void timer_init_1khz(void)
     TCB0.INTFLAGS = TCB_CAPT_bm;  // Clear any pending interrupt
     *((volatile uint8_t*)&TCB0.INTCTRL) = TCB_CAPT_bm; // Enable capture/compare interrupt
     TCB0.CTRLA = (0x01 << 1) | TCB_ENABLE_bm;  // CLKSEL=01 (CLK_PER/2), ENABLE=1
-    
-    // Debug: confirm register values
-    char buf[80];
-    snprintf(buf, sizeof(buf), "TCB0: CTRLA=%02X CTRLB=%02X INTCTRL=%02X CCMP=%u CNT=%u\r\n CPUINT CTRLA=%02X LVL0PRI=%02X \r\n", 
-        TCB0.CTRLA, TCB0.CTRLB, TCB0.INTCTRL, TCB0.CCMP, TCB0.CNT, CPUINT.CTRLA, CPUINT.LVL0PRI);
-    USART2_sendString(buf);
+
 }
 
 ISR(TCB0_INT_vect)
@@ -79,8 +74,8 @@ ISR(TCB0_INT_vect)
     if ((ms_counter % 50) == 0) {
         sched_flags.mpu_due = true;
     }
-    // 8 ms: MLX service (tighter loop for faster capture)
-    if ((ms_counter % 8) == 0) {
+    // 20 ms: MLX service (tighter loop for faster capture)
+    if ((ms_counter % 20) == 0) {
         sched_flags.mlx_due = true;
     }
     // 20 ms: motor pattern step
@@ -179,13 +174,6 @@ void scheduler_init(void)
     sched_flags.pwm_due = false;
     sched_flags.led_due = false;
 
-            char buf[64];
-        snprintf(buf, sizeof(buf),
-        "CPUINT CTRLA=%02X  LVL0PRI=%02X  STATUS=%02X\r\n",
-        CPUINT.CTRLA, CPUINT.LVL0PRI, CPUINT.STATUS);
-        USART2_sendString(buf);
-
-
     mlx_ctx.state = MLX_STATE_WAIT_READY;
     mlx_ctx.current_row = 0;
     /*
@@ -200,13 +188,6 @@ void scheduler_init(void)
 
     // timer_init_1khz();
     sei();
-
-    // Report final CPUINT state
-    char final_buf[64];
-    snprintf(final_buf, sizeof(final_buf), "CPUINT CTRLA=%02X LVL0PRI=%02X STATUS=%02X\r\n",
-        CPUINT.CTRLA, CPUINT.LVL0PRI, CPUINT.STATUS);
-    USART2_sendString(final_buf);
-    USART2_sendString("[SEI DONE]\r\n");
 }
 
 void scheduler_service_tasks(void)

@@ -6,7 +6,7 @@
 #define TWI_TIMEOUT 50000  // Timeout counter (증가: 10000 → 50000)
 // Faster I2C speed for better MLX throughput; 25 ~= 266kHz @16MHz
 // MLX90640 supports up to 1MHz, MPU6050 supports 400kHz
-#define TWI0_BAUD 25
+#define TWI0_BAUD 15
 
 // Debug UART wrapper macros based on TWI_DEBUG_UART setting
 #if TWI_DEBUG_ENABLE

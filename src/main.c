@@ -12,15 +12,9 @@
 #include "../include/debugging.h"
 #include "../include/drive.h"
 
-// runtime ISR counter removed; scheduler-driven tasks used instead
-
-
 // Function to set CPU clock to maximum speed (16MHz or 20MHz depending on Vcc)
 void clock_init(void)
 {
-    // To change protected registers, we need to write to CCP first
-    // Then we have 4 clock cycles to write the actual register
-    
     // Set prescaler to /1 (no division) for maximum speed
     // Your chip has 16MHz base oscillator (based on earlier UART testing)
     // This will give you 16MHz CPU clock instead of 2.67MHz
@@ -48,7 +42,7 @@ int main(void)
     TWI0_init();
     motor_init();
         drive_init();
-    scheduler_init();
+    // scheduler_init();
     _delay_ms(100);
     
     // Set MLX90640 to 16Hz frame rate for faster data acquisition
@@ -62,13 +56,13 @@ int main(void)
         _delay_ms(50);
     }
 
-    initial_debugging();
+    // initial_debugging();
     int loop_count = 0;
     while (1)
     {
         scheduler_service_tasks();
         // sensor_loop_debugging(loop_count);
-        // pwm_loop_debugging(loop_count);
+        pwm_loop_debugging(loop_count);
         drive_update();
     }
 }

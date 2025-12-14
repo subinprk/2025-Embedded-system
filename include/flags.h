@@ -1,6 +1,8 @@
 #ifndef FLAGS_H
 #define FLAGS_H
 
+#include <stdbool.h>
+
 // Cooperative scheduler flags (set in timer ISR, serviced in main loop)
 typedef struct {
     volatile bool mlx_due;   // Read/process MLX90640 frame
