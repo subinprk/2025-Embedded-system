@@ -6,5 +6,6 @@
 
 void drive_init(void);
 void drive_update(void);
+void solenoid_update(void);
 
 #endif // DRIVE_H

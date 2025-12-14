@@ -1,4 +1,5 @@
 #include "../include/interrupt.h"
+#include "../include/drive.h"
 #include <util/delay.h>
 #include <stdbool.h>
 
@@ -58,6 +59,7 @@ ISR(TCB0_INT_vect)
 {
     static uint16_t ms_counter = 0;
     static uint8_t isr_announced = 0;
+    static uint8_t pwm_tick = 0;
     TCB0.INTFLAGS = TCB_CAPT_bm; // Clear flag
 
     ms_counter++;
@@ -70,17 +72,60 @@ ISR(TCB0_INT_vect)
     if (ms_counter > 1000) {
         ms_counter = 0; 
     }
-    // 50 ms: MPU poll
-    if ((ms_counter % 50) == 0) {
-        sched_flags.mpu_due = true;
+
+    // === PWM execution: every 2ms (precise timing) ===
+    if ((ms_counter % 2) == 0) {
+        extern volatile uint8_t motorA_speed;
+        extern volatile uint8_t motorB_speed;
+        
+        pwm_tick++;
+        if (pwm_tick >= 10) pwm_tick = 0;  // 10 steps = 20ms period
+
+        // Motor A PWM control
+        uint8_t duty_a = (motorA_speed > 100) ? 10 : ((uint16_t)motorA_speed * 10 + 50) / 100;
+        if (motorA_speed > 0) {
+            if (pwm_tick < duty_a) {
+                motorA_forward();
+            } else {
+                motorA_stop();
+            }
+        } else {
+            motorA_stop();
+        }
+
+        // Motor B PWM control
+        // NOTE: Hardware wiring swap - motorB_stop()=forward, motorB_forward()=stop
+        uint8_t duty_b = (motorB_speed > 100) ? 10 : ((uint16_t)motorB_speed * 10 + 50) / 100;
+        if (motorB_speed > 0) {
+            if (pwm_tick < duty_b) {
+                motorB_forward();     //moves forward
+            } else {
+                motorB_stop();  //  stops (hardware swap)
+            }
+        } else {
+            motorB_stop();  // Coast
+        }
     }
-    // 20 ms: MLX service (tighter loop for faster capture)
-    if ((ms_counter % 20) == 0) {
+    // 50 ms: MPU poll
+    // if ((ms_counter % 50) == 0) {
+    //     sched_flags.mpu_due = true;
+    // }
+    // 8 ms: MLX service (tighter loop for faster capture)
+    //I2C supports 13.9ms full frame at 1Mhz, I divide them into 4 parts, so 8ms is safe
+    if ((ms_counter % 8) == 0) {
         sched_flags.mlx_due = true;
     }
-    // 20 ms: motor pattern step
-    if ((ms_counter % 20) == 0) {
+    // 500 ms: PWM debug logging (actual PWM runs every 2ms above)
+    if ((ms_counter % 500) == 0) {
         sched_flags.pwm_due = true;
+    }
+    // 20 ms: Navigation update (interrupt-driven scheduling, executed in main)
+    if ((ms_counter % 10) == 0) {
+        sched_flags.drive_due = true;
+    }
+    // 10 ms: Solenoid check (more responsive)
+    if ((ms_counter % 8) == 0) {
+        sched_flags.solenoid_due = true;
     }
     // 500 ms: LED heartbeat
     if ((ms_counter % 500) == 0) {
@@ -112,15 +157,15 @@ static void task_mlx_frame(void)
             break;
 
         case MLX_STATE_READ_ROWS:
-            // Read multiple rows per service call for faster capture
-            for (uint8_t i = 0; i < 12 && mlx_ctx.current_row < MLX_HEIGHT; i++) {
+            // Read multiple rows per service call (4 chunks → 6 rows each)
+            for (uint8_t i = 0; i < 6 && mlx_ctx.current_row < MLX_HEIGHT; i++) {
                 MLX_read_row(mlx_ctx.current_row,
                     &mlx_ctx.frame[mlx_ctx.active_idx][(uint16_t)mlx_ctx.current_row * MLX_WIDTH]);
                 mlx_ctx.current_row++;
             }
 
-            // Reset bus every 12 rows to avoid lockups (short wait only)
-            if ((mlx_ctx.current_row % 12) == 0) {
+            // Reset bus every 6 rows to avoid lockups (short wait only)
+            if ((mlx_ctx.current_row % 6) == 0) {
                 TWI0_reset_bus();
                 _delay_us(100);
             }
@@ -196,16 +241,25 @@ void scheduler_service_tasks(void)
         USART2_sendString("[LED]\r\n");
         task_led_toggle();
         USART2_sendString("~\r\n");
+        sched_flags.led_due = false;
     }
     if (sched_flags.pwm_due) {
-        USART2_sendString("[PWM]\r\n");
         task_pwm_update();
     }
-    // Re-enable MPU sampling only (keep MLX disabled for now)
-    if (sched_flags.mpu_due) {
-        USART2_sendString("[MPU]\r\n");
-        task_mpu_sample();
+    if (sched_flags.drive_due) {
+        // Drive update may use MLX-derived data; keep it in main context
+        drive_update();
+        sched_flags.drive_due = false;
     }
+    if (sched_flags.solenoid_due) {
+        solenoid_update();
+        sched_flags.solenoid_due = false;
+    }
+    // Re-enable MPU sampling only (keep MLX disabled for now)
+    // if (sched_flags.mpu_due) {
+    //     USART2_sendString("[MPU]\r\n");
+    //     task_mpu_sample();
+    // }
     // Keep MLX disabled for isolation
     if (sched_flags.mlx_due) {
         USART2_sendString("[MLX]\r\n");

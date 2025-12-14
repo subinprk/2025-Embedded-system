@@ -41,13 +41,13 @@ int main(void)
 
     TWI0_init();
     motor_init();
-        drive_init();
+    drive_init();
     scheduler_init();
     _delay_ms(100);
     
     // Set MLX90640 to 16Hz frame rate for faster data acquisition
     USART2_sendString("Setting MLX90640 to 16Hz...\r\n");
-    MLX_set_framerate(MLX_FRAMERATE_32HZ);
+    MLX_set_framerate(MLX_FRAMERATE_16HZ);
     USART2_sendString("MLX90640 configured.\r\n");
     
     // Aggressive I2C bus recovery at startup
@@ -57,12 +57,10 @@ int main(void)
     }
 
     // initial_debugging();
-    int loop_count = 0;
     while (1)
     {
         scheduler_service_tasks();
         // sensor_loop_debugging(loop_count);
         // pwm_loop_debugging(loop_count);
-        drive_update();
     }
 }

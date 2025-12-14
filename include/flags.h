@@ -9,6 +9,8 @@ typedef struct {
     volatile bool mpu_due;   // Read MPU6050 accel/gyro
     volatile bool pwm_due;   // Update motor drive pattern
     volatile bool led_due;   // Heartbeat LED toggle
+    volatile bool drive_due; // Run drive_update (navigation)
+    volatile bool solenoid_due; // Handle solenoid action
 } SchedulerFlags;
 
 extern SchedulerFlags sched_flags;  // Declared here, defined in interrupt.c

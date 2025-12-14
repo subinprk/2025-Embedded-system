@@ -1,71 +1,29 @@
-# PlatformIO-based Makefile for ATmega4809 project
-# This Makefile wraps PlatformIO commands for convenience
+MCU=atmega4809
+CC=D:\avr-gcc-15.2.0-x64-windows\avr-gcc-15.2.0-x64-windows\bin\avr-gcc.exe
+# Clock: 16MHz (prescaler disabled in software)
+# Base oscillator is 16MHz (OSCCFG fuse), we disable /6 prescaler in clock_init()
+CFLAGS=-mmcu=$(MCU) -Os -DF_CPU=16000000UL -DBAUD_RATE=9600
+OBJCOPY=D:\avr-gcc-15.2.0-x64-windows\avr-gcc-15.2.0-x64-windows\bin\avr-objcopy.exe
+AVRDUDE=D:\avr-gcc-15.2.0-x64-windows\avr-gcc-15.2.0-x64-windows\bin\avrdude.exe
 
-.PHONY: all build upload flash clean monitor help pio-clean
+PROGRAMMER=jtag2updi
+PORT=COM4    # ← UNO가 잡힌 포트로 맞춰줘!
 
-# Environment
-ENV ?= ATmega4809
-PIO := pio
+SRC=$(wildcard src/*.c)
+OBJ=$(SRC:.c=.o)
 
-# Default target
-all: build
+all: main.hex
 
-# Build the project
-build:
-	@echo "Building for $(ENV)..."
-	$(PIO) run -e $(ENV)
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-# Upload/Flash the firmware to the device
-upload flash:
-	@echo "Uploading firmware to $(ENV) via JTAG2UPDI..."
-	$(PIO) run -e $(ENV) -t upload
+main.elf: $(OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
 
-# Monitor serial output
-monitor:
-	@echo "Opening serial monitor for $(ENV)..."
-	$(PIO) device monitor -e $(ENV) -b 9600
+main.hex: main.elf
+	$(OBJCOPY) -O ihex -R .eeprom $< $@
 
-# Build and upload in one command
-all-upload: build upload
-	@echo "Build and upload complete!"
-
-# Clean build artifacts
+flash: main.hex
+	$(AVRDUDE) -p m4809 -c $(PROGRAMMER) -P $(PORT) -F -U flash:w:main.hex
 clean:
-	@echo "Cleaning build artifacts..."
-	$(PIO) run -e $(ENV) -t clean
-	rm -f main.elf main.hex
-	rm -f src/*.o
-
-# Deep clean (removes .pio directory)
-pio-clean: clean
-	@echo "Removing PlatformIO build directory..."
-	rm -rf .pio
-
-# Show project information
-info:
-	@echo "Project Information:"
-	@echo "  Environment: $(ENV)"
-	@echo "  Board: ATmega4809"
-	@echo "  CPU Clock: 16 MHz"
-	@echo "  Baud Rate: 9600"
-	@echo "  Upload Protocol: jtag2updi"
-
-# Help target
-help:
-	@echo "ATmega4809 Project Makefile"
-	@echo ""
-	@echo "Available targets:"
-	@echo "  make build       - Build the firmware"
-	@echo "  make upload      - Upload/flash firmware to device"
-	@echo "  make flash       - Alias for upload"
-	@echo "  make monitor     - Open serial monitor"
-	@echo "  make all-upload  - Build and upload in one command"
-	@echo "  make clean       - Clean build artifacts"
-	@echo "  make pio-clean   - Deep clean (remove all build files)"
-	@echo "  make info        - Show project information"
-	@echo "  make help        - Show this help message"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make             # Build the firmware"
-	@echo "  make upload      # Upload to device"
-	@echo "  make monitor     # Watch serial output"
+	del main.elf main.hex src\*.o 2> NUL || rm -f main.elf main.hex src/*.o

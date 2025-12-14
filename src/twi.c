@@ -4,9 +4,9 @@
 #include <util/delay.h>
 
 #define TWI_TIMEOUT 50000  // Timeout counter (증가: 10000 → 50000)
-// Faster I2C speed for better MLX throughput; 25 ~= 266kHz @16MHz
-// MLX90640 supports up to 1MHz, MPU6050 supports 400kHz
-#define TWI0_BAUD 15
+// Max I2C speed for MLX90640; MBAUD = (F_CPU/(2*f))-5
+// At 16MHz CPU and 1MHz I2C, MBAUD ≈ 3
+#define TWI0_BAUD 3
 
 // Debug UART wrapper macros based on TWI_DEBUG_UART setting
 #if TWI_DEBUG_ENABLE
@@ -31,12 +31,12 @@ void TWI0_init(void)
     PORTA.PIN3CTRL = PORT_PULLUPEN_bm;
 
     // I2C clock calculation: MBAUD = (F_CPU / (2 * f_SCL)) - 5
-    // For 16MHz CPU:
-    //   @ 400kHz I2C: MBAUD = (16,000,000 / 800,000) - 5 = 15
-    //   @ 200kHz I2C: MBAUD = (16,000,000 / 400,000) - 5 = 35
-    //   @ 100kHz I2C: MBAUD = (16,000,000 / 200,000) - 5 = 75
-    //   @  50kHz I2C: MBAUD = (16,000,000 / 100,000) - 5 = 155
-    TWI0.MBAUD = TWI0_BAUD;  // 100kHz I2C @ 16MHz CPU
+    // For 16MHz CPU examples:
+    //   @ 1MHz I2C: MBAUD = (16,000,000 / 2,000,000) - 5 = 3
+    //   @ 400kHz I2C: MBAUD = 15
+    //   @ 200kHz I2C: MBAUD = 35
+    //   @ 100kHz I2C: MBAUD = 75
+    TWI0.MBAUD = TWI0_BAUD;  // Configure I2C speed
 
     TWI0.MCTRLA = TWI_ENABLE_bm;
     TWI0.MSTATUS = TWI_BUSSTATE_IDLE_gc;

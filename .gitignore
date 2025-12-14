@@ -1,5 +1,4 @@
 *.o
 NUL
-Makefile
 *.ini
 .pio

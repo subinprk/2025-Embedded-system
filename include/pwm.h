@@ -21,23 +21,26 @@
 #define MOTOR_B_IN2_PORT PORTD
 #define MOTOR_B_IN2_bm PIN0_bm
 
+// Motor speed variables (accessed by ISR for PWM)
+extern volatile uint8_t motorA_speed;
+extern volatile uint8_t motorB_speed;
+
 // Initialize motor driver pins (set as outputs, outputs low)
 void motor_init(void);
 
-// Set motor A speed/direction. Range -100..100 (negative = reverse).
-// Note: this implementation uses digital outputs with PWM-style duty cycle modulation.
-// Speed 100 = always on, 50 = 50% duty cycle, 0 = always off.
+// Set motor A speed/direction. Range 0..100 (forward only, no backward).
+// Speed 100 = always on, 50 = 50% duty cycle, 0 = stop.
 void motorA_set(int8_t speed);
-void motorA_set_speed(int8_t speed);
+void motorA_set_speed(uint8_t speed);
 void motorA_forward(void);
-void motorA_backward(void);
+void motorA_backward(void);  // Disabled: redirects to stop
 void motorA_stop(void);
 
-// Set motor B speed/direction. Range -100..100 (negative = reverse).
+// Set motor B speed/direction. Range 0..100 (forward only, no backward).
 void motorB_set(int8_t speed);
-void motorB_set_speed(int8_t speed);
+void motorB_set_speed(uint8_t speed);
 void motorB_forward(void);
-void motorB_backward(void);
+void motorB_backward(void);  // Disabled: redirects to stop
 void motorB_stop(void);
 
 void task_pwm_update(void);
