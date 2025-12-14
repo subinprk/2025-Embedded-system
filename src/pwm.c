@@ -73,7 +73,7 @@ void motorA_set_speed(int8_t speed)
 }
 
 // Motor B control (digital only)
-void motorB_forward(void)
+void motorB_stop(void)
 {
     MOTOR_B_IN1_PORT.OUTSET = MOTOR_B_IN1_bm;
     MOTOR_B_IN2_PORT.OUTCLR = MOTOR_B_IN2_bm;
@@ -85,7 +85,7 @@ void motorB_backward(void)
     MOTOR_B_IN2_PORT.OUTSET = MOTOR_B_IN2_bm;
 }
 
-void motorB_stop(void)
+void motorB_forward(void)
 {
     // coast: both low
     MOTOR_B_IN1_PORT.OUTCLR = MOTOR_B_IN1_bm;

@@ -42,7 +42,7 @@ int main(void)
     TWI0_init();
     motor_init();
         drive_init();
-    // scheduler_init();
+    scheduler_init();
     _delay_ms(100);
     
     // Set MLX90640 to 16Hz frame rate for faster data acquisition
@@ -62,7 +62,7 @@ int main(void)
     {
         scheduler_service_tasks();
         // sensor_loop_debugging(loop_count);
-        pwm_loop_debugging(loop_count);
+        // pwm_loop_debugging(loop_count);
         drive_update();
     }
 }

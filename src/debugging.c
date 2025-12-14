@@ -58,8 +58,9 @@ void pwm_loop_debugging(int loop_count){
         // switch (motor_phase) {
         //     case 0:
                 // both forward
-                motorA_forward();
+                // motorB_backward();
                 motorB_forward();
+                motorA_stop();
                 USART2_sendString("Motors: BOTH FORWARD\r\n");
                 // break;
     //         case 1:
