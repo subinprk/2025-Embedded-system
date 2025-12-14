@@ -107,10 +107,11 @@ void drive_update(void)
     }
 
     // Solenoid condition: centered and PD3 sensor == 1
-    uint8_t centered = (cx >= (center_x - deadband_x)) && (cx <= (center_x + deadband_x));
-    if (centered && s_center) {
-        PORTA.OUTSET = PIN7_bm;  // activate solenoid
+    //uint8_t centered = (cx >= (center_x - deadband_x)) && (cx <= (center_x + deadband_x));
+    if (/*centered &&*/ s_center) {
+        PORTA.OUTCLR = PIN7_bm;  // activate solenoid
+        USART2_sendString("Solenoid ACTIVATED\r\n");
     } else {
-        PORTA.OUTCLR = PIN7_bm;  // deactivate solenoid
+        PORTA.OUTSET = PIN7_bm;  // deactivate solenoid
     }
 }
